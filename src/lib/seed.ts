@@ -109,13 +109,7 @@ export async function seedDatabase() {
         create: {
           firstName: 'David', lastName: 'Wilson', phone: '07700 900001',
           tenancies: {
-            create: { propertyId: prop1.id, tenancyType: 'social', status: 'active', startDate: new Date('2024-06-01'), monthlyRent: 850, serviceCharge: 75, otherCharges: 25, paymentFreq: 'monthly',
-              payments: { createMany: [
-                { amount: 950, type: 'rent', status: 'completed', method: 'bank_transfer', reference: 'PAY-001', dueDate: new Date('2026-07-01'), paidAt: new Date('2026-07-01') },
-                { amount: 950, type: 'rent', status: 'completed', method: 'bank_transfer', reference: 'PAY-002', dueDate: new Date('2026-08-01'), paidAt: new Date('2026-08-01') },
-                { amount: 950, type: 'rent', status: 'pending', method: 'bank_transfer', reference: 'PAY-003', dueDate: new Date('2026-09-01') },
-              ]}
-            }
+            create: { propertyId: prop1.id, tenancyType: 'social', status: 'active', startDate: new Date('2024-06-01'), monthlyRent: 850, serviceCharge: 75, otherCharges: 25, paymentFreq: 'monthly' }
           },
           requests: {
             createMany: [
@@ -150,19 +144,24 @@ export async function seedDatabase() {
           contactName: 'HR Department', contactEmail: 'hr@nhstrust-bham.nhs.uk', contactPhone: '0121 555 0100',
           address: 'Queen Elizabeth Hospital, Edgbaston', city: 'Birmingham', postcode: 'B15 2TH',
           description: 'One of the largest NHS trusts in the UK, providing comprehensive healthcare services across the West Midlands.',
-          jobs: {
-            createMany: [
-              { title: 'Staff Nurse - A&E Department', description: 'We are seeking a dedicated Staff Nurse to join our busy Accident & Emergency department. The successful candidate will provide high-quality nursing care to patients presenting with a wide range of conditions.', requirements: 'NMC Registration, minimum 2 years acute care experience, excellent clinical assessment skills, ability to work under pressure.', benefits: 'NHS Pension, generous annual leave, CPD support, NHS discount scheme, cycle to work scheme.', location: 'Queen Elizabeth Hospital, Birmingham', city: 'Birmingham', postcode: 'B15 2TH', salaryMin: 27500, salaryMax: 32500, salaryType: 'annual', jobType: 'full-time', experience: 'mid', remoteType: 'on-site', industry: 'Healthcare', category: 'healthcare', status: 'open', isFeatured: true, applicationCount: 12, expiresAt: new Date('2026-10-15') },
-              { title: 'Healthcare Assistant', description: 'Join our team of dedicated Healthcare Assistants providing essential support to nursing staff and patients across various wards.', requirements: 'NVQ Level 2 in Health Care or equivalent, compassionate approach, good communication skills, willingness to work shifts.', benefits: 'NHS Pension, annual leave, training opportunities, NHS discounts.', location: 'Queen Elizabeth Hospital, Birmingham', city: 'Birmingham', postcode: 'B15 2TH', salaryMin: 21000, salaryMax: 24500, salaryType: 'annual', jobType: 'full-time', experience: 'entry', remoteType: 'on-site', industry: 'Healthcare', category: 'healthcare', status: 'open', applicationCount: 23, expiresAt: new Date('2026-09-30') },
-              { title: 'Senior Physiotherapist', description: 'An exciting opportunity for an experienced Senior Physiotherapist to lead our musculoskeletal outpatient service.', requirements: 'BSc Physiotherapy, HCPC Registration, minimum 5 years post-qualification experience, leadership skills.', benefits: 'NHS Pension, 27 days annual leave, CPD budget, flexible working.', location: 'Birmingham Community Hospital', city: 'Birmingham', postcode: 'B15 3TH', salaryMin: 38000, salaryMax: 45000, salaryType: 'annual', jobType: 'full-time', experience: 'senior', remoteType: 'hybrid', industry: 'Healthcare', category: 'healthcare', status: 'open', applicationCount: 5, expiresAt: new Date('2026-10-30') },
-              { title: 'Mental Health Nurse', description: 'We are looking for a compassionate Mental Health Nurse to work within our community mental health team.', requirements: 'NMC Registration, mental health nursing qualification, community experience preferred, driving licence essential.', benefits: 'NHS Pension, lease car scheme, CPD, flexible hours.', location: 'Community Health Centre, Solihull', city: 'Birmingham', postcode: 'B91 3GH', salaryMin: 30000, salaryMax: 36000, salaryType: 'annual', jobType: 'full-time', experience: 'mid', remoteType: 'hybrid', industry: 'Healthcare', category: 'healthcare', status: 'open', applicationCount: 8, expiresAt: new Date('2026-11-15') },
-              { title: 'HR Manager', description: 'Seeking an experienced HR Manager to lead our people operations across multiple departments.', requirements: 'CIPD Level 7 or equivalent, 5+ years HR generalist experience, employment law knowledge, strategic HR experience.', benefits: 'NHS Pension, generous leave, professional development.', location: 'Queen Elizabeth Hospital, Birmingham', city: 'Birmingham', postcode: 'B15 2TH', salaryMin: 45000, salaryMax: 55000, salaryType: 'annual', jobType: 'full-time', experience: 'senior', remoteType: 'hybrid', industry: 'Healthcare', category: 'hr', status: 'open', applicationCount: 3, expiresAt: new Date('2026-10-20') },
-            ]
-          }
         }
       }
     }
   })
+
+  // Create jobs for the employer
+  const employer = await db.employer.findUnique({ where: { userId: employerUser.id } })
+  if (employer) {
+    await db.job.createMany({
+      data: [
+        { employerId: employer.id, title: 'Staff Nurse - A&E Department', description: 'We are seeking a dedicated Staff Nurse to join our busy A&E department.', requirements: 'NMC Registration, minimum 2 years acute care experience.', benefits: 'NHS Pension, generous annual leave, CPD support.', location: 'Queen Elizabeth Hospital, Birmingham', city: 'Birmingham', postcode: 'B15 2TH', salaryMin: 27500, salaryMax: 32500, salaryType: 'annual', jobType: 'full-time', experience: 'mid', remoteType: 'on-site', industry: 'Healthcare', category: 'healthcare', status: 'open', isFeatured: true, applicationCount: 12, expiresAt: new Date('2026-10-15') },
+        { employerId: employer.id, title: 'Healthcare Assistant', description: 'Join our team of dedicated Healthcare Assistants.', requirements: 'NVQ Level 2 in Health Care or equivalent.', benefits: 'NHS Pension, annual leave, training.', location: 'Queen Elizabeth Hospital, Birmingham', city: 'Birmingham', postcode: 'B15 2TH', salaryMin: 21000, salaryMax: 24500, salaryType: 'annual', jobType: 'full-time', experience: 'entry', remoteType: 'on-site', industry: 'Healthcare', category: 'healthcare', status: 'open', applicationCount: 23, expiresAt: new Date('2026-09-30') },
+        { employerId: employer.id, title: 'Senior Physiotherapist', description: 'Lead our musculoskeletal outpatient service.', requirements: 'BSc Physiotherapy, HCPC Registration.', benefits: 'NHS Pension, 27 days annual leave.', location: 'Birmingham Community Hospital', city: 'Birmingham', postcode: 'B15 3TH', salaryMin: 38000, salaryMax: 45000, salaryType: 'annual', jobType: 'full-time', experience: 'senior', remoteType: 'hybrid', industry: 'Healthcare', category: 'healthcare', status: 'open', applicationCount: 5, expiresAt: new Date('2026-10-30') },
+        { employerId: employer.id, title: 'Mental Health Nurse', description: 'Work within our community mental health team.', requirements: 'NMC Registration, mental health nursing qualification.', benefits: 'NHS Pension, flexible hours.', location: 'Community Health Centre, Solihull', city: 'Birmingham', postcode: 'B91 3GH', salaryMin: 30000, salaryMax: 36000, salaryType: 'annual', jobType: 'full-time', experience: 'mid', remoteType: 'hybrid', industry: 'Healthcare', category: 'healthcare', status: 'open', applicationCount: 8, expiresAt: new Date('2026-11-15') },
+        { employerId: employer.id, title: 'HR Manager', description: 'Lead our people operations across multiple departments.', requirements: 'CIPD Level 7 or equivalent, 5+ years HR experience.', benefits: 'NHS Pension, generous leave.', location: 'Queen Elizabeth Hospital, Birmingham', city: 'Birmingham', postcode: 'B15 2TH', salaryMin: 45000, salaryMax: 55000, salaryType: 'annual', jobType: 'full-time', experience: 'senior', remoteType: 'hybrid', industry: 'Healthcare', category: 'hr', status: 'open', applicationCount: 3, expiresAt: new Date('2026-10-20') },
+      ]
+    })
+  }
 
   // Create candidate
   const seekerUser = await db.user.create({
@@ -178,10 +177,10 @@ export async function seedDatabase() {
           title: 'Registered Nurse', firstName: 'Sarah', lastName: 'Mitchell',
           phone: '07700 900100', location: 'Birmingham, West Midlands', city: 'Birmingham', postcode: 'B5 7AA',
           dateOfBirth: new Date('1990-03-15'), nationality: 'British', rightToWork: 'UK Citizen',
-          summary: 'Dedicated and compassionate Registered Nurse with 6 years of experience in acute care and community nursing settings. Skilled in patient assessment, care planning, and multidisciplinary team collaboration. Seeking opportunities to contribute to high-quality patient care in the Birmingham area.',
-          skills: 'Nursing, Patient Assessment, Care Planning, IV Cannulation, Medication Management, Clinical Documentation, Team Leadership, Infection Control, Phlebotomy, BLS/ACLS',
-          experience: 'Senior Staff Nurse | City Hospital, Birmingham | 2021-Present, Staff Nurse | Royal Infirmary, Manchester | 2018-2021, Healthcare Assistant | General Hospital | 2016-2018',
-          qualifications: 'BSc Nursing, NMC Registered, BLS Certified, Mentorship Course',
+          summary: 'Dedicated Registered Nurse with 6 years of experience in acute care and community nursing. Skilled in patient assessment, care planning, and multidisciplinary team collaboration.',
+          skills: 'Nursing, Patient Assessment, Care Planning, IV Cannulation, Medication Management',
+          experience: 'Senior Staff Nurse | City Hospital | 2021-Present, Staff Nurse | Royal Infirmary | 2018-2021',
+          qualifications: 'BSc Nursing, NMC Registered, BLS Certified',
           availability: 'Immediately', jobTypePref: 'full-time', salaryExpectMin: 28000, salaryExpectMax: 38000,
           remotePref: 'on-site', cvFileName: 'Sarah_Mitchell_CV.pdf', cvFilePath: '/cvs/sarah.pdf', profileComplete: 85
         }
@@ -190,13 +189,13 @@ export async function seedDatabase() {
   })
 
   // Create applications
-  const jobs = await db.job.findMany({ where: { employerId: (await employerUser.employer!).id } })
+  const jobs = await db.job.findMany({ where: { employerId: employer!.id } })
   if (jobs.length > 0 && seekerUser.profile) {
     await db.jobApplication.createMany({
       data: [
-        { jobId: jobs[0].id, candidateId: seekerUser.profile.id, status: 'shortlisted', matchScore: 92, coverLetter: 'I am writing to express my interest in the Staff Nurse position at the A&E Department. With 6 years of nursing experience and strong acute care skills, I am confident I can make a meaningful contribution to your team.' },
-        { jobId: jobs[1].id, candidateId: seekerUser.profile.id, status: 'interview', matchScore: 78, coverLetter: 'I would like to apply for the Healthcare Assistant role. My nursing background and patient care experience make me well-suited for this position.' },
-        { jobId: jobs[3].id, candidateId: seekerUser.profile.id, status: 'applied', matchScore: 85, coverLetter: 'As a nurse with community experience, I am drawn to the Mental Health Nurse position and believe my skills would be an asset to your team.' },
+        { jobId: jobs[0].id, candidateId: seekerUser.profile.id, status: 'shortlisted', matchScore: 92, coverLetter: 'I am writing to express my interest in the Staff Nurse position at the A&E Department. With 6 years of nursing experience, I am confident I can make a meaningful contribution.' },
+        { jobId: jobs[1].id, candidateId: seekerUser.profile.id, status: 'interview', matchScore: 78, coverLetter: 'I would like to apply for the Healthcare Assistant role. My nursing background makes me well-suited for this position.' },
+        { jobId: jobs[3] ? jobs[3].id : jobs[0].id, candidateId: seekerUser.profile.id, status: 'applied', matchScore: 85, coverLetter: 'As a nurse with community experience, I am drawn to the Mental Health Nurse position.' },
       ]
     })
   }

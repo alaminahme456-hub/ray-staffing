@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Home, CreditCard, FileText, MessageSquare, HelpCircle,
   User, Search, Briefcase, Upload, Bell, Settings,
   Building2, Users, FileCheck, BarChart3, Shield,
-  Globe, FileSearch, Robot, Activity, TrendingUp,
+  Globe, FileSearch, Bot, Activity, TrendingUp,
   ChevronLeft, LogOut, Menu, X
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -90,7 +90,7 @@ const portalNav: Record<string, { title: string; subtitle: string; items: Sideba
       { icon: <LayoutDashboard className="h-5 w-5" />, label: 'Overview', view: 'seo-dashboard' },
       { icon: <FileText className="h-5 w-5" />, label: 'Pages', view: 'seo-pages' },
       { icon: <Globe className="h-5 w-5" />, label: 'Sitemap', view: 'seo-sitemap' },
-      { icon: <Robot className="h-5 w-5" />, label: 'Robots.txt', view: 'seo-robots' },
+      { icon: <Bot className="h-5 w-5" />, label: 'Robots.txt', view: 'seo-robots' },
       { icon: <FileSearch className="h-5 w-5" />, label: 'SEO Analyzer', view: 'seo-analyzer' },
       { icon: <Activity className="h-5 w-5" />, label: 'Search Performance', view: 'seo-performance' },
     ]
