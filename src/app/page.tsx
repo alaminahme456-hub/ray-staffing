@@ -144,7 +144,7 @@ export default function App() {
   }
 
   return (
-    <div className={`min-h-screen flex ${isAdminOrSeo ? 'bg-[#0B1D33]' : 'bg-[#F7F9FC]'}`}>
+    <div className={`min-h-screen flex ${isAdminOrSeo ? 'bg-[#050E07]' : 'bg-[#FAF8F5]'}`}>
       <PortalSidebar />
       <div className="flex-1 flex flex-col min-w-0">
         <PortalTopBar />

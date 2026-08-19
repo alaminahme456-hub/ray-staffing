@@ -1,11 +1,14 @@
 'use client'
 
+import { lazy, Suspense } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '@/store/app-store'
 import { Button } from '@/components/ui/button'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card'
+import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { House, Shield, Users, ArrowRight, Heart, CheckCircle, Clock, Headphones, Cpu, Handshake } from 'lucide-react'
+import { House, Shield, Users, ArrowRight, Heart, CheckCircle, Headphones, Cpu, Handshake } from 'lucide-react'
+
+const House3DHero = lazy(() => import('./House3DHero'))
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 30 },
@@ -22,59 +25,95 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-[#0B1D33] via-[#122B4D] to-[#1A3A5C]">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(196,148,42,0.12),transparent_60%)]" />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-28 lg:py-36">
-          <motion.div
-            initial="hidden"
-            animate="visible"
-            variants={staggerContainer}
-            className="max-w-3xl"
-          >
-            <motion.p variants={fadeInUp} transition={{ duration: 0.5 }} className="text-[#C4942A] font-semibold text-sm sm:text-base tracking-wider uppercase mb-4">
-              RAY Staffing Consulting Ltd
-            </motion.p>
-            <motion.h1 variants={fadeInUp} transition={{ duration: 0.5 }} className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
-              Quality Housing.{' '}
-              <span className="text-[#C4942A]">Smarter HR.</span>{' '}
-              Exceptional Talent.
-            </motion.h1>
-            <motion.p variants={fadeInUp} transition={{ duration: 0.5 }} className="text-lg sm:text-xl text-gray-300 leading-relaxed mb-10 max-w-2xl">
-              RAY is a UK-licensed professional services company delivering trusted housing management, expert HR &amp; compliance support, and specialist recruitment across England and Wales.
-            </motion.p>
-            <motion.div variants={fadeInUp} transition={{ duration: 0.5 }} className="flex flex-col sm:flex-row gap-4 mb-14">
-              <Button
-                onClick={() => navigate('hr-solutions')}
-                size="lg"
-                className="bg-[#C4942A] hover:bg-[#B38523] text-white font-semibold px-8 h-12 text-base"
-              >
-                Explore Our Services
-                <ArrowRight className="ml-2 size-5" />
-              </Button>
-              <Button
-                onClick={() => navigate('contact')}
-                variant="outline"
-                size="lg"
-                className="border-white/40 text-white hover:bg-white/10 hover:text-white font-semibold px-8 h-12 text-base"
-              >
-                Talk to RAY
-              </Button>
+      {/* ═══════ HERO ═══════ */}
+      <section className="relative overflow-hidden min-h-[92vh] flex items-center" style={{ background: 'linear-gradient(160deg, #050E07 0%, #0A1F0D 40%, #0F2B18 100%)' }}>
+        {/* Subtle gold radial glow */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_40%,rgba(196,148,42,0.07),transparent_55%)]" />
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-0 w-full">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-8 items-center min-h-[80vh]">
+            {/* ── Left: Text ── */}
+            <motion.div
+              initial="hidden"
+              animate="visible"
+              variants={staggerContainer}
+              className="max-w-xl"
+            >
+              <motion.div variants={fadeInUp} transition={{ duration: 0.5 }} className="flex items-center gap-3 mb-6">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#C4942A]/30 bg-[#C4942A]/10">
+                  <span className="text-xl font-bold text-[#C4942A]">R</span>
+                </div>
+                <span className="text-sm font-semibold tracking-widest uppercase text-[#8A9B8E]">RAY Staffing Consulting</span>
+              </motion.div>
+
+              <motion.h1 variants={fadeInUp} transition={{ duration: 0.6 }} className="text-4xl sm:text-5xl lg:text-[3.4rem] font-bold leading-[1.1] mb-6">
+                <span className="text-[#FAF8F5]">Quality Housing.</span>
+                <br />
+                <span className="text-[#C4942A]">Smarter HR.</span>{' '}
+                <span className="text-[#FAF8F5]">Exceptional Talent.</span>
+              </motion.h1>
+
+              <motion.p variants={fadeInUp} transition={{ duration: 0.5 }} className="text-base sm:text-lg leading-relaxed mb-8 max-w-lg" style={{ color: '#9BADA0' }}>
+                RAY is a UK-licensed professional services company delivering trusted housing management, expert HR &amp; compliance support, and specialist recruitment across England and Wales.
+              </motion.p>
+
+              <motion.div variants={fadeInUp} transition={{ duration: 0.5 }} className="flex flex-col sm:flex-row gap-3 mb-10">
+                <Button
+                  onClick={() => navigate('hr-solutions')}
+                  size="lg"
+                  className="bg-[#C4942A] hover:bg-[#B38523] text-white font-semibold px-7 h-12 text-base shadow-lg shadow-[#C4942A]/20"
+                >
+                  Explore Our Services
+                  <ArrowRight className="ml-2 size-4" />
+                </Button>
+                <Button
+                  onClick={() => navigate('contact')}
+                  variant="outline"
+                  size="lg"
+                  className="border-[#C4942A]/40 text-[#FAF8F5] hover:bg-[#C4942A]/10 hover:text-[#FAF8F5] hover:border-[#C4942A]/60 font-semibold px-7 h-12 text-base"
+                >
+                  Talk to RAY
+                </Button>
+              </motion.div>
+
+              <motion.div variants={fadeInUp} transition={{ duration: 0.5 }} className="flex flex-wrap gap-2.5">
+                {['UK Licensed & Compliant', 'Housing Services', 'HR Consultancy', 'Specialist Recruitment', 'Health & Care Staffing'].map((item) => (
+                  <Badge
+                    key={item}
+                    className="bg-white/5 text-[#9BADA0] border-white/10 px-3 py-1.5 text-xs font-medium hover:bg-white/10 transition-colors"
+                  >
+                    <CheckCircle className="size-3 mr-1.5 text-[#C4942A]" />
+                    {item}
+                  </Badge>
+                ))}
+              </motion.div>
             </motion.div>
-            <motion.div variants={fadeInUp} transition={{ duration: 0.5 }} className="flex flex-wrap gap-3">
-              {['UK Licensed & Compliant', 'Housing Services', 'HR Consultancy', 'Specialist Recruitment', 'Health & Care Staffing'].map((item) => (
-                <Badge key={item} className="bg-white/10 text-white/90 border-white/20 px-3 py-1.5 text-xs sm:text-sm font-medium">
-                  <CheckCircle className="size-3.5 mr-1.5 text-[#C4942A]" />
-                  {item}
-                </Badge>
-              ))}
+
+            {/* ── Right: 3D House ── */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.8, delay: 0.3, ease: 'easeOut' }}
+              className="h-[340px] sm:h-[420px] lg:h-[520px] xl:h-[580px] rounded-2xl overflow-hidden border border-white/5"
+            >
+              <Suspense
+                fallback={
+                  <div className="w-full h-full flex items-center justify-center bg-[#050E07]">
+                    <div className="w-8 h-8 border-2 border-[#C4942A]/30 border-t-[#C4942A] rounded-full animate-spin" />
+                  </div>
+                }
+              >
+                <House3DHero />
+              </Suspense>
             </motion.div>
-          </motion.div>
+          </div>
         </div>
+
+        {/* Subtle bottom fade */}
+        <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-[#FAF8F5] to-transparent" />
       </section>
 
-      {/* Services Section */}
-      <section className="bg-[#F7F9FC] py-16 lg:py-24">
+      {/* ═══════ SERVICES ═══════ */}
+      <section className="bg-[#FAF8F5] py-16 lg:py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial="hidden"
@@ -84,10 +123,10 @@ export default function HomePage() {
             className="text-center mb-14"
           >
             <motion.p variants={fadeInUp} className="text-[#C4942A] font-semibold text-sm tracking-wider uppercase mb-3">Our Services</motion.p>
-            <motion.h2 variants={fadeInUp} className="text-3xl sm:text-4xl font-bold text-[#0B1D33] mb-4">
+            <motion.h2 variants={fadeInUp} className="text-3xl sm:text-4xl font-bold text-[#0A1F0D] mb-4">
               Three Pillars of Excellence
             </motion.h2>
-            <motion.p variants={fadeInUp} className="text-[#5A6B7F] text-lg max-w-2xl mx-auto">
+            <motion.p variants={fadeInUp} className="text-[#5C7362] text-lg max-w-2xl mx-auto">
               From housing management to HR compliance and specialist recruitment, RAY delivers integrated professional services under one trusted brand.
             </motion.p>
           </motion.div>
@@ -121,15 +160,15 @@ export default function HomePage() {
             ].map((service) => (
               <motion.div key={service.title} variants={fadeInUp} transition={{ duration: 0.4 }}>
                 <Card
-                  className="group h-full bg-white border-[#D1D9E6] hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer"
+                  className="group h-full bg-white border-[#D1DDD4]/60 hover:shadow-lg hover:shadow-[#0A1F0D]/5 hover:-translate-y-1 transition-all duration-300 cursor-pointer"
                   onClick={() => navigate(service.link as any)}
                 >
                   <CardHeader>
-                    <div className="size-14 rounded-xl bg-[#0B1D33] flex items-center justify-center mb-3">
+                    <div className="size-14 rounded-xl bg-[#0A1F0D] flex items-center justify-center mb-3">
                       <service.icon className="size-7 text-[#C4942A]" />
                     </div>
-                    <CardTitle className="text-xl text-[#0B1D33]">{service.title}</CardTitle>
-                    <CardDescription className="text-[#5A6B7F] leading-relaxed">{service.description}</CardDescription>
+                    <CardTitle className="text-xl text-[#0A1F0D]">{service.title}</CardTitle>
+                    <CardDescription className="text-[#5C7362] leading-relaxed">{service.description}</CardDescription>
                   </CardHeader>
                   <CardFooter>
                     <span className="text-[#C4942A] font-semibold text-sm flex items-center gap-1.5 group-hover:gap-2.5 transition-all">
@@ -143,7 +182,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Why RAY Section */}
+      {/* ═══════ WHY RAY ═══════ */}
       <section className="bg-white py-16 lg:py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
@@ -154,10 +193,10 @@ export default function HomePage() {
             className="text-center mb-14"
           >
             <motion.p variants={fadeInUp} className="text-[#C4942A] font-semibold text-sm tracking-wider uppercase mb-3">Why Choose RAY</motion.p>
-            <motion.h2 variants={fadeInUp} className="text-3xl sm:text-4xl font-bold text-[#0B1D33] mb-4">
+            <motion.h2 variants={fadeInUp} className="text-3xl sm:text-4xl font-bold text-[#0A1F0D] mb-4">
               Built on Trust, Driven by Results
             </motion.h2>
-            <motion.p variants={fadeInUp} className="text-[#5A6B7F] text-lg max-w-2xl mx-auto">
+            <motion.p variants={fadeInUp} className="text-[#5C7362] text-lg max-w-2xl mx-auto">
               We combine deep UK market knowledge with modern technology to deliver services that genuinely make a difference.
             </motion.p>
           </motion.div>
@@ -178,12 +217,12 @@ export default function HomePage() {
               { icon: Headphones, title: 'Dedicated Support', description: 'Our support teams are available to assist with enquiries, resolve issues promptly, and ensure a smooth experience at every stage.' },
             ].map((feature) => (
               <motion.div key={feature.title} variants={fadeInUp} transition={{ duration: 0.4 }} className="flex gap-4">
-                <div className="shrink-0 size-12 rounded-lg bg-[#F0F4F8] flex items-center justify-center">
-                  <feature.icon className="size-6 text-[#0B1D33]" />
+                <div className="shrink-0 size-12 rounded-lg bg-[#E8EDE9] flex items-center justify-center">
+                  <feature.icon className="size-6 text-[#0A1F0D]" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-[#0B1D33] mb-1.5">{feature.title}</h3>
-                  <p className="text-[#5A6B7F] text-sm leading-relaxed">{feature.description}</p>
+                  <h3 className="font-semibold text-[#0A1F0D] mb-1.5">{feature.title}</h3>
+                  <p className="text-[#5C7362] text-sm leading-relaxed">{feature.description}</p>
                 </div>
               </motion.div>
             ))}
@@ -191,35 +230,36 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Healthcare Section */}
-      <section className="bg-[#F0F4F8] py-16 lg:py-24">
+      {/* ═══════ HEALTHCARE ═══════ */}
+      <section className="bg-[#E8EDE9] py-16 lg:py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, margin: '-80px' }}
             variants={staggerContainer}
-            className="bg-[#0B1D33] rounded-2xl p-8 sm:p-12 lg:p-16 relative overflow-hidden"
+            className="rounded-2xl p-8 sm:p-12 lg:p-16 relative overflow-hidden"
+            style={{ background: 'linear-gradient(160deg, #050E07 0%, #0A1F0D 60%, #0F2B18 100%)' }}
           >
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(196,148,42,0.15),transparent_60%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(196,148,42,0.12),transparent_60%)]" />
             <div className="relative grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
               <div>
                 <motion.div variants={fadeInUp} transition={{ duration: 0.5 }} className="flex items-center gap-3 mb-6">
-                  <div className="size-12 rounded-xl bg-[#C4942A]/20 flex items-center justify-center">
+                  <div className="size-12 rounded-xl bg-[#C4942A]/15 flex items-center justify-center">
                     <Heart className="size-6 text-[#C4942A]" />
                   </div>
-                  <Badge className="bg-[#C4942A]/20 text-[#C4942A] border-[#C4942A]/30">Healthcare & Care Staffing</Badge>
+                  <Badge className="bg-[#C4942A]/15 text-[#C4942A] border-[#C4942A]/25">Healthcare &amp; Care Staffing</Badge>
                 </motion.div>
-                <motion.h2 variants={fadeInUp} transition={{ duration: 0.5 }} className="text-3xl sm:text-4xl font-bold text-white mb-4 leading-tight">
+                <motion.h2 variants={fadeInUp} transition={{ duration: 0.5 }} className="text-3xl sm:text-4xl font-bold text-[#FAF8F5] mb-4 leading-tight">
                   Specialist Staffing for Health &amp; Social Care
                 </motion.h2>
-                <motion.p variants={fadeInUp} transition={{ duration: 0.5 }} className="text-gray-300 leading-relaxed mb-8">
+                <motion.p variants={fadeInUp} transition={{ duration: 0.5 }} className="text-[#9BADA0] leading-relaxed mb-8">
                   The UK healthcare sector faces unprecedented demand for skilled professionals. RAY provides specialist recruitment services for NHS trusts, private healthcare providers, care homes, and supported living services. Our rigorous screening, compliance checks, and candidate matching ensure you get the right people — first time.
                 </motion.p>
                 <motion.div variants={fadeInUp} transition={{ duration: 0.5 }}>
                   <Button
                     onClick={() => navigate('healthcare')}
-                    className="bg-[#C4942A] hover:bg-[#B38523] text-white font-semibold px-8 h-12"
+                    className="bg-[#C4942A] hover:bg-[#B38523] text-white font-semibold px-8 h-12 shadow-lg shadow-[#C4942A]/20"
                   >
                     Find Healthcare Talent
                     <ArrowRight className="ml-2 size-5" />
@@ -237,7 +277,7 @@ export default function HomePage() {
                     className="bg-white/5 border border-white/10 rounded-xl p-5 text-center"
                   >
                     <p className="text-2xl sm:text-3xl font-bold text-[#C4942A]">{stat.value}</p>
-                    <p className="text-gray-400 text-sm mt-1">{stat.label}</p>
+                    <p className="text-[#8A9B8E] text-sm mt-1">{stat.label}</p>
                   </motion.div>
                 ))}
               </div>
@@ -246,8 +286,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="bg-[#0B1D33] py-16 lg:py-24">
+      {/* ═══════ CTA ═══════ */}
+      <section className="py-16 lg:py-24" style={{ background: 'linear-gradient(160deg, #050E07 0%, #0A1F0D 100%)' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div
             initial="hidden"
@@ -255,17 +295,17 @@ export default function HomePage() {
             viewport={{ once: true, margin: '-80px' }}
             variants={staggerContainer}
           >
-            <motion.h2 variants={fadeInUp} className="text-3xl sm:text-4xl font-bold text-white mb-4">
+            <motion.h2 variants={fadeInUp} className="text-3xl sm:text-4xl font-bold text-[#FAF8F5] mb-4">
               Ready to Work with RAY?
             </motion.h2>
-            <motion.p variants={fadeInUp} className="text-gray-300 text-lg max-w-2xl mx-auto mb-10">
+            <motion.p variants={fadeInUp} className="text-[#9BADA0] text-lg max-w-2xl mx-auto mb-10">
               Whether you are an employer seeking exceptional talent or a professional looking for your next opportunity, RAY is here to help you succeed.
             </motion.p>
             <motion.div variants={fadeInUp} className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button
                 onClick={() => navigate('employers')}
                 size="lg"
-                className="bg-[#C4942A] hover:bg-[#B38523] text-white font-semibold px-8 h-12 text-base"
+                className="bg-[#C4942A] hover:bg-[#B38523] text-white font-semibold px-8 h-12 text-base shadow-lg shadow-[#C4942A]/20"
               >
                 <Users className="mr-2 size-5" />
                 For Employers
@@ -274,7 +314,7 @@ export default function HomePage() {
                 onClick={() => navigate('job-seekers')}
                 variant="outline"
                 size="lg"
-                className="border-white/40 text-white hover:bg-white/10 hover:text-white font-semibold px-8 h-12 text-base"
+                className="border-[#C4942A]/40 text-[#FAF8F5] hover:bg-[#C4942A]/10 hover:text-[#FAF8F5] hover:border-[#C4942A]/60 font-semibold px-8 h-12 text-base"
               >
                 <ArrowRight className="mr-2 size-5" />
                 For Job Seekers

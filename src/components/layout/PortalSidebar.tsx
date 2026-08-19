@@ -104,12 +104,12 @@ export function PortalSidebar() {
 
   if (!navConfig) return null
 
-  const sidebarBg = portalType === 'admin' || portalType === 'seo' ? 'bg-[#0B1D33]' : 'bg-white'
-  const textColor = portalType === 'admin' || portalType === 'seo' ? 'text-[#E8EDF3]' : 'text-[#0B1D33]'
-  const mutedColor = portalType === 'admin' || portalType === 'seo' ? 'text-[#8899AA]' : 'text-[#5A6B7F]'
-  const activeBg = portalType === 'admin' || portalType === 'seo' ? 'bg-[#1A3A5C] text-white' : 'bg-[#F0F4F8] text-[#0B1D33]'
-  const hoverBg = portalType === 'admin' || portalType === 'seo' ? 'hover:bg-[#1A3A5C]/50' : 'hover:bg-[#F7F9FC]'
-  const borderColor = portalType === 'admin' || portalType === 'seo' ? 'border-[#1A3A5C]' : 'border-[#D1D9E6]'
+  const sidebarBg = portalType === 'admin' || portalType === 'seo' ? 'bg-[#050E07]' : 'bg-white'
+  const textColor = portalType === 'admin' || portalType === 'seo' ? 'text-[#E8EDE9]' : 'text-[#0A1F0D]'
+  const mutedColor = portalType === 'admin' || portalType === 'seo' ? 'text-[#8A9B8E]' : 'text-[#5C7362]'
+  const activeBg = portalType === 'admin' || portalType === 'seo' ? 'bg-[#0F2B18] text-[#FAF8F5]' : 'bg-[#E8EDE9] text-[#0A1F0D]'
+  const hoverBg = portalType === 'admin' || portalType === 'seo' ? 'hover:bg-[#0F2B18]/60' : 'hover:bg-[#E8EDE9]'
+  const borderColor = portalType === 'admin' || portalType === 'seo' ? 'border-[#153A22]' : 'border-[#D1DDD4]'
 
   return (
     <>
@@ -218,7 +218,7 @@ export function PortalTopBar() {
   return (
     <header className={cn(
       'sticky top-0 z-30 flex h-14 items-center gap-4 border-b px-4 lg:px-6 lg:hidden',
-      portalType === 'admin' || portalType === 'seo' ? 'bg-[#0B1D33] border-[#1A3A5C] text-white' : 'bg-white border-[#D1D9E6] text-[#0B1D33]'
+      portalType === 'admin' || portalType === 'seo' ? 'bg-[#050E07] border-[#153A22] text-[#FAF8F5]' : 'bg-white border-[#D1DDD4] text-[#0A1F0D]'
     )}>
       <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)} className={portalType === 'admin' || portalType === 'seo' ? 'text-white hover:bg-white/10' : ''}>
         <Menu className="h-5 w-5" />
@@ -230,7 +230,7 @@ export function PortalTopBar() {
         <span className="text-sm font-semibold">{navConfig.subtitle}</span>
       </div>
       <div className="ml-auto flex items-center gap-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1A3A5C] text-white text-xs font-bold">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0F2B18] text-[#FAF8F5] text-xs font-bold">
           {user?.name?.charAt(0) || 'U'}
         </div>
       </div>
