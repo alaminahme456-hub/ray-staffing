@@ -95,17 +95,6 @@ export default function HomePage() {
                 </Button>
               </motion.div>
 
-              <motion.div variants={fadeInUp} transition={{ duration: 0.5 }} className="flex flex-wrap gap-2.5">
-                {['UK Licensed & Compliant', 'Housing Services', 'HR Consultancy', 'Specialist Recruitment', 'Health & Care Staffing'].map((item) => (
-                  <Badge
-                    key={item}
-                    className="bg-white/5 text-[#9BADA0] border-white/10 px-3 py-1.5 text-xs font-medium hover:bg-white/10 transition-colors"
-                  >
-                    <CheckCircle className="size-3 mr-1.5 text-[#C4942A]" />
-                    {item}
-                  </Badge>
-                ))}
-              </motion.div>
             </motion.div>
 
           </div>
