@@ -30,13 +30,34 @@ export default function HomePage() {
         {/* Subtle gold radial glow */}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_40%,rgba(196,148,42,0.07),transparent_55%)]" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-0 w-full">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-8 items-center min-h-[80vh]">
-            {/* ── Left: Text ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-center min-h-[85vh] lg:min-h-[88vh]">
+            {/* ── Mobile: 3D first (order-1), Desktop: 3D second (order-2) ── */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.6, delay: 0.2, ease: 'easeOut' }}
+              className="order-1 lg:order-2 h-[260px] sm:h-[340px] lg:h-[520px] xl:h-[580px] rounded-2xl overflow-hidden border border-white/[0.06] shadow-2xl shadow-black/30"
+              aria-hidden="true"
+            >
+              <Suspense
+                fallback={
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-[#050E07]">
+                    <div className="w-6 h-6 border-2 border-[#C4942A]/20 rounded-full" />
+                    <div className="absolute w-6 h-6 border-2 border-transparent border-t-[#C4942A] rounded-full animate-spin" />
+                    <p className="text-[#8A9B8E] text-sm mt-4">Building your experience...</p>
+                  </div>
+                }
+              >
+                <House3DHero />
+              </Suspense>
+            </motion.div>
+
+            {/* ── Mobile: Text second (order-2), Desktop: Text first (order-1) ── */}
             <motion.div
               initial="hidden"
               animate="visible"
               variants={staggerContainer}
-              className="max-w-xl"
+              className="order-2 lg:order-1 max-w-xl"
             >
               <motion.div variants={fadeInUp} transition={{ duration: 0.5 }} className="flex items-center gap-3 mb-6">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#C4942A]/30 bg-[#C4942A]/10">
@@ -88,23 +109,6 @@ export default function HomePage() {
               </motion.div>
             </motion.div>
 
-            {/* ── Right: 3D House ── */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.8, delay: 0.3, ease: 'easeOut' }}
-              className="h-[340px] sm:h-[420px] lg:h-[520px] xl:h-[580px] rounded-2xl overflow-hidden border border-white/5"
-            >
-              <Suspense
-                fallback={
-                  <div className="w-full h-full flex items-center justify-center bg-[#050E07]">
-                    <div className="w-8 h-8 border-2 border-[#C4942A]/30 border-t-[#C4942A] rounded-full animate-spin" />
-                  </div>
-                }
-              >
-                <House3DHero />
-              </Suspense>
-            </motion.div>
           </div>
         </div>
 
