@@ -1,0 +1,392 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Core Auth & Users ───────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String?
+  name          String?
+  phone         String?
+  role          String    @default("user") // SUPER_ADMIN, HOUSING_ADMIN, RECRUITMENT_ADMIN, HR_ADMIN, LOCAL_ADMIN, SUPPORT_STAFF, customer, candidate, employer
+  region        String?
+  isActive      Boolean   @default(true)
+  emailVerified Boolean   @default(false)
+  lastLogin     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  profile      CandidateProfile?
+  employer      Employer?
+  customer      Customer?
+  auditLogs     AuditLog[]
+  notifications Notification[]
+  sentMessages  Message[]      @relation("SentMessages")
+  receivedMessages Message[]   @relation("ReceivedMessages")
+}
+
+// ─── Roles & Permissions ─────────────────────────────
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  permissions String   // JSON string of permissions array
+  createdAt   DateTime @default(now())
+}
+
+// ─── Candidate / Job Seeker ──────────────────────────
+
+model CandidateProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String?
+  firstName       String?
+  lastName        String?
+  phone           String?
+  location        String?
+  city            String?
+  postcode        String?
+  dateOfBirth     DateTime?
+  nationality     String?
+  rightToWork     String?
+  summary         String?
+  skills          String?   // JSON array
+  experience      String? // JSON array of experiences
+  qualifications  String?   // JSON array
+  availability    String?
+  jobTypePref     String?   // full-time, part-time, contract, temporary
+  salaryExpectMin Int?
+  salaryExpectMax Int?
+  remotePref      String?   // remote, hybrid, on-site
+  cvFileName      String?
+  cvFilePath      String?
+  profileComplete Int      @default(0) // percentage 0-100
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  applications JobApplication[]
+  documents    CandidateDocument[]
+}
+
+model CandidateDocument {
+  id          String   @id @default(cuid())
+  candidateId String
+  candidate   CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  fileName    String
+  filePath    String
+  fileType    String
+  fileSize    Int
+  category    String?   // cv, cover_letter, certificate, other
+  uploadedAt  DateTime @default(now())
+}
+
+// ─── Employer ────────────────────────────────────────
+
+model Employer {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName   String
+  companyType   String?
+  industry      String?
+  website       String?
+  companySize   String?
+  contactName   String?
+  contactEmail  String?
+  contactPhone  String?
+  address       String?
+  city          String?
+  postcode      String?
+  description   String?
+  logoPath      String?
+  verified      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  jobs          Job[]
+}
+
+// ─── Jobs ────────────────────────────────────────────
+
+model Job {
+  id            String   @id @default(cuid())
+  employerId    String
+  employer      Employer @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  title         String
+  description   String
+  requirements  String?
+  benefits      String?
+  location      String?
+  city          String?
+  postcode      String?
+  salaryMin     Int?
+  salaryMax     Int?
+  salaryType    String?  // annual, monthly, hourly, daily
+  jobType       String?  // full-time, part-time, contract, temporary
+  experience    String?  // entry, junior, mid, senior, executive
+  remoteType    String?  // remote, hybrid, on-site
+  industry      String?
+  category      String?  // healthcare, it, finance, etc.
+  status        String   @default("draft") // draft, open, closed, filled, archived
+  isFeatured    Boolean  @default(false)
+  applicationCount Int   @default(0)
+  postedAt     DateTime @default(now())
+  expiresAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  applications JobApplication[]
+}
+
+// ─── Job Applications ────────────────────────────────
+
+model JobApplication {
+  id          String   @id @default(cuid())
+  jobId       String
+  job         Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  candidateId String
+  candidate   CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  status      String   @default("applied") // applied, reviewing, shortlisted, interview, decision, offer, rejected, withdrawn
+  coverLetter  String?
+  matchScore  Int?     // AI matching score 0-100
+  notes       String?
+  appliedAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  interviews Interview[]
+}
+
+// ─── Interviews ──────────────────────────────────────
+
+model Interview {
+  id             String   @id @default(cuid())
+  applicationId  String
+  application    JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  type           String   // phone, video, in-person, assessment
+  status         String   @default("scheduled") // scheduled, completed, cancelled
+  scheduledAt    DateTime
+  duration       Int?     // minutes
+  location       String?
+  meetingLink    String?
+  interviewer    String?
+  notes          String?
+  feedback       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// ─── Customer (Housing) ──────────────────────────────
+
+model Customer {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName   String?
+  lastName    String?
+  phone       String?
+  address     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenancies   Tenancy[]
+  payments    Payment[]
+  requests    ServiceRequest[]
+  documents   CustomerDocument[]
+}
+
+// ─── Properties ──────────────────────────────────────
+
+model Property {
+  id            String   @id @default(cuid())
+  name          String?
+  address       String
+  city          String?
+  postcode      String?
+  propertyType  String?  // social_housing, private_rental, estate, supported
+  bedrooms      Int?
+  status        String   @default("available") // available, occupied, maintenance
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenancies     Tenancy[]
+}
+
+// ─── Tenancies ───────────────────────────────────────
+
+model Tenancy {
+  id             String   @id @default(cuid())
+  customerId     String
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  propertyId     String
+  property       Property @relation(fields: [propertyId], references: [id])
+  tenancyType    String   // social, private, leasehold, supported
+  status         String   @default("active") // active, ending, ended
+  startDate      DateTime
+  endDate        DateTime?
+  monthlyRent    Int
+  serviceCharge  Int      @default(0)
+  otherCharges   Int      @default(0)
+  paymentFreq    String   @default("monthly") // weekly, monthly, quarterly
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  payments Payment[]
+}
+
+// ─── Payments ────────────────────────────────────────
+
+model Payment {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tenancyId   String?
+  tenancy     Tenancy?  @relation(fields: [tenancyId], references: [id])
+  amount      Int
+  type        String   // rent, service_charge, other, deposit
+  status      String   @default("pending") // pending, completed, failed, refunded
+  method      String?  // bank_transfer, card, direct_debit
+  reference   String?
+  dueDate     DateTime?
+  paidAt      DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  receiptPath String?
+}
+
+// ─── Service Requests ────────────────────────────────
+
+model ServiceRequest {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  category    String   // housing_issue, maintenance, payment_query, documentation, general, support
+  subject     String
+  description String
+  status      String   @default("NEW") // NEW, IN_REVIEW, IN_PROGRESS, RESOLVED, CLOSED
+  priority    String   @default("medium") // low, medium, high, urgent
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── Customer Documents ──────────────────────────────
+
+model CustomerDocument {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  fileName    String
+  filePath    String
+  fileType    String
+  fileSize    Int
+  category    String?  // tenancy, statement, letter, notice, agreement, other
+  description String?
+  uploadedAt  DateTime @default(now())
+}
+
+// ─── Messages ────────────────────────────────────────
+
+model Message {
+  id            String   @id @default(cuid())
+  senderId      String
+  sender        User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId    String
+  receiver      User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  subject       String?
+  content       String
+  isRead        Boolean  @default(false)
+  attachmentUrl String?
+  attachmentName String?
+  createdAt     DateTime @default(now())
+}
+
+// ─── Notifications ───────────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // message, request_update, application_update, interview, document, payment, job_alert, admin
+  title     String
+  content   String?
+  link      String?  // internal link to relevant page
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// ─── Audit Logs ──────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  adminId   String?
+  admin     User?    @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String?  // user, customer, job, application, etc.
+  entityId  String?
+  details   String?
+  ip        String?
+  createdAt DateTime @default(now())
+}
+
+// ─── SEO ─────────────────────────────────────────────
+
+model SeoPage {
+  id              String   @id @default(cuid())
+  url             String   @unique
+  title           String?
+  metaDescription String?
+  canonicalUrl    String?
+  ogTitle         String?
+  ogDescription   String?
+  ogImage         String?
+  robotsDirectives String?  // index, noindex, follow, nofollow
+  schemaType      String?  // Organization, LocalBusiness, JobPosting, Article, BreadcrumbList, WebSite
+  schemaData      String? // JSON
+  indexStatus     String   @default("unknown") // indexed, not_indexed, unknown
+  seoScore        Int      @default(0)
+  h1              String?
+  headings        String? // JSON
+  wordCount       Int      @default(0)
+  lastAnalyzed    DateTime?
+  lastUpdated     DateTime @updatedAt
+  createdAt       DateTime @default(now())
+}
+
+// ─── Locations ───────────────────────────────────────
+
+model Location {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  city        String?
+  region      String?
+  description String?
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── Services ────────────────────────────────────────
+
+model Service {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  category    String?  // housing, hr, recruitment, healthcare
+  icon        String?
+  sortOrder   Int      @default(0)
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
