@@ -63,7 +63,6 @@ export default function HomePage() {
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#C4942A]/30 bg-[#C4942A]/10">
                   <span className="text-xl font-bold text-[#C4942A]">R</span>
                 </div>
-                <span className="text-sm font-semibold tracking-widest uppercase text-[#8A9B8E]">RAY Staffing Consulting</span>
               </motion.div>
 
               <motion.h1 variants={fadeInUp} transition={{ duration: 0.6 }} className="text-4xl sm:text-5xl lg:text-[3.4rem] font-bold leading-[1.1] mb-6">
