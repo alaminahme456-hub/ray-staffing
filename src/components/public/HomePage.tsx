@@ -1,14 +1,11 @@
 'use client'
 
-import { lazy, Suspense } from 'react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '@/store/app-store'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { House, Shield, Users, ArrowRight, Heart, CheckCircle, Headphones, Cpu, Handshake } from 'lucide-react'
-
-const House3DHero = lazy(() => import('./House3DHero'))
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 30 },
@@ -39,17 +36,15 @@ export default function HomePage() {
               className="order-1 lg:order-2 h-[260px] sm:h-[340px] lg:h-[520px] xl:h-[580px] rounded-2xl overflow-hidden border border-white/[0.06] shadow-2xl shadow-black/30"
               aria-hidden="true"
             >
-              <Suspense
-                fallback={
-                  <div className="w-full h-full flex flex-col items-center justify-center bg-[#050E07]">
-                    <div className="w-6 h-6 border-2 border-[#C4942A]/20 rounded-full" />
-                    <div className="absolute w-6 h-6 border-2 border-transparent border-t-[#C4942A] rounded-full animate-spin" />
-                    <p className="text-[#8A9B8E] text-sm mt-4">Building your experience...</p>
-                  </div>
-                }
+              <video
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="w-full h-full object-cover"
               >
-                <House3DHero />
-              </Suspense>
+                <source src="/videos/hero-house.mp4" type="video/mp4" />
+              </video>
             </motion.div>
 
             {/* ── Mobile: Text second (order-2), Desktop: Text first (order-1) ── */}
