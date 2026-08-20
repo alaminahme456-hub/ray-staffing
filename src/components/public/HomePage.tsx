@@ -54,11 +54,7 @@ export default function HomePage() {
               variants={staggerContainer}
               className="order-2 lg:order-1 max-w-xl"
             >
-              <motion.div variants={fadeInUp} transition={{ duration: 0.5 }} className="flex items-center gap-3 mb-6">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#C4942A]/30 bg-[#C4942A]/10">
-                  <span className="text-xl font-bold text-[#C4942A]">R</span>
-                </div>
-              </motion.div>
+
 
               <motion.h1 variants={fadeInUp} transition={{ duration: 0.6 }} className="text-4xl sm:text-5xl lg:text-[3.4rem] font-bold leading-[1.1] mb-6">
                 <span className="text-[#FAF8F5]">Quality Housing.</span>
