@@ -78,11 +78,10 @@ export default function HomePage() {
                 </Button>
                 <Button
                   onClick={() => navigate('contact')}
-                  variant="outline"
                   size="lg"
-                  className="border-[#C4942A]/40 text-[#FAF8F5] hover:bg-[#C4942A]/10 hover:text-[#FAF8F5] hover:border-[#C4942A]/60 font-semibold px-7 h-12 text-base"
+                  className="bg-[#153A22] hover:bg-[#1a4529] text-[#FAF8F5] font-semibold px-7 h-12 text-base border border-[#C4942A]/30"
                 >
-                  Talk to RAY
+                  Get Started
                 </Button>
               </motion.div>
 
