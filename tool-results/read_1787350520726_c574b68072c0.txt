@@ -1,0 +1,817 @@
+     1→'use client'
+     2→
+     3→import { useState, useEffect, useSyncExternalStore, type FormEvent } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import {
+     6→  Plus,
+     7→  Search,
+     8→  Filter,
+     9→  MapPin,
+    10→  Users,
+    11→  Calendar,
+    12→  MoreHorizontal,
+    13→  Eye,
+    14→  Pencil,
+    15→  UserCircle,
+    16→  Pause,
+    17→  Play,
+    18→  XCircle,
+    19→  Loader2,
+    20→} from 'lucide-react'
+    21→import { Card, CardContent } from '@/components/ui/card'
+    22→import { Button } from '@/components/ui/button'
+    23→import { Badge } from '@/components/ui/badge'
+    24→import { Input } from '@/components/ui/input'
+    25→import { Label } from '@/components/ui/label'
+    26→import { Textarea } from '@/components/ui/textarea'
+    27→import { Skeleton } from '@/components/ui/skeleton'
+    28→import {
+    29→  Dialog,
+    30→  DialogContent,
+    31→  DialogHeader,
+    32→  DialogTitle,
+    33→} from '@/components/ui/dialog'
+    34→import {
+    35→  Select,
+    36→  SelectContent,
+    37→  SelectItem,
+    38→  SelectTrigger,
+    39→  SelectValue,
+    40→} from '@/components/ui/select'
+    41→import {
+    42→  DropdownMenu,
+    43→  DropdownMenuContent,
+    44→  DropdownMenuItem,
+    45→  DropdownMenuSeparator,
+    46→  DropdownMenuTrigger,
+    47→} from '@/components/ui/dropdown-menu'
+    48→import { useAppStore } from '@/store/app-store'
+    49→import { createClient } from '@/lib/supabase/client'
+    50→import { toast } from 'sonner'
+    51→
+    52→/* ------------------------------------------------------------------ */
+    53→/*  Types                                                              */
+    54→/* ------------------------------------------------------------------ */
+    55→
+    56→interface JobRow {
+    57→  id: string
+    58→  employer_id: string
+    59→  title: string
+    60→  listing: string | null
+    61→  location: string | null
+    62→  salary_min: number | null
+    63→  salary_max: number | null
+    64→  job_type: string | null
+    65→  sector: string | null
+    66→  requirements: string | null
+    67→  description: string | null
+    68→  status: string
+    69→  created_at: string
+    70→}
+    71→
+    72→interface VacancyForm {
+    73→  title: string
+    74→  listing: string
+    75→  requirements: string
+    76→  location: string
+    77→  salary_min: string
+    78→  salary_max: string
+    79→  job_type: string
+    80→  sector: string
+    81→  description: string
+    82→}
+    83→
+    84→const EMPTY_FORM: VacancyForm = {
+    85→  title: '',
+    86→  listing: '',
+    87→  requirements: '',
+    88→  location: '',
+    89→  salary_min: '',
+    90→  salary_max: '',
+    91→  job_type: 'full-time',
+    92→  sector: '',
+    93→  description: '',
+    94→}
+    95→
+    96→/* ------------------------------------------------------------------ */
+    97→/*  Constants                                                          */
+    98→/* ------------------------------------------------------------------ */
+    99→
+   100→const STATUS_OPTIONS = [
+   101→  { value: 'all', label: 'All Statuses' },
+   102→  { value: 'active', label: 'Active' },
+   103→  { value: 'closed', label: 'Closed' },
+   104→  { value: 'draft', label: 'Draft' },
+   105→  { value: 'paused', label: 'Paused' },
+   106→]
+   107→
+   108→const JOB_TYPE_OPTIONS = [
+   109→  { value: 'full-time', label: 'Full-time' },
+   110→  { value: 'part-time', label: 'Part-time' },
+   111→  { value: 'contract', label: 'Contract' },
+   112→  { value: 'temporary', label: 'Temporary' },
+   113→  { value: 'bank', label: 'Bank' },
+   114→]
+   115→
+   116→const STATUS_STYLES: Record<string, string> = {
+   117→  active: 'bg-emerald-100 text-emerald-700',
+   118→  closed: 'bg-red-100 text-red-700',
+   119→  draft: 'bg-gray-100 text-gray-600',
+   120→  paused: 'bg-amber-100 text-amber-700',
+   121→}
+   122→
+   123→/* ------------------------------------------------------------------ */
+   124→/*  Helpers                                                            */
+   125→/* ------------------------------------------------------------------ */
+   126→
+   127→function formatDate(iso: string): string {
+   128→  const d = new Date(iso)
+   129→  return d.toLocaleDateString('en-GB', {
+   130→    day: '2-digit',
+   131→    month: 'short',
+   132→    year: 'numeric',
+   133→  })
+   134→}
+   135→
+   136→function jobToForm(job: JobRow): VacancyForm {
+   137→  return {
+   138→    title: job.title ?? '',
+   139→    listing: job.listing ?? '',
+   140→    requirements: job.requirements ?? '',
+   141→    location: job.location ?? '',
+   142→    salary_min: job.salary_min != null ? String(job.salary_min) : '',
+   143→    salary_max: job.salary_max != null ? String(job.salary_max) : '',
+   144→    job_type: job.job_type ?? 'full-time',
+   145→    sector: job.sector ?? '',
+   146→    description: job.description ?? '',
+   147→  }
+   148→}
+   149→
+   150→/* ------------------------------------------------------------------ */
+   151→/*  Skeleton                                                           */
+   152→/* ------------------------------------------------------------------ */
+   153→
+   154→function PageSkeleton() {
+   155→  return (
+   156→    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
+   157→      <Skeleton className="h-8 w-40" />
+   158→      <Skeleton className="h-10 w-full" />
+   159→      <div className="space-y-3">
+   160→        {Array.from({ length: 4 }).map((_, i) => (
+   161→          <Skeleton key={i} className="h-20 rounded-xl" />
+   162→        ))}
+   163→      </div>
+   164→    </div>
+   165→  )
+   166→}
+   167→
+   168→/* ------------------------------------------------------------------ */
+   169→/*  External store for jobs (avoids setState in effects)               */
+   170→/* ------------------------------------------------------------------ */
+   171→
+   172→type JobsSnapshot = {
+   173→  jobs: JobRow[]
+   174→  appCounts: Record<string, number>
+   175→  loading: boolean
+   176→}
+   177→
+   178→let snapshot: JobsSnapshot = {
+   179→  jobs: [],
+   180→  appCounts: {},
+   181→  loading: true,
+   182→}
+   183→
+   184→const storeListeners = new Set<() => void>()
+   185→
+   186→function emitSnapshotChange() {
+   187→  for (const fn of storeListeners) fn()
+   188→}
+   189→
+   190→function subscribeToSnapshot(listener: () => void) {
+   191→  storeListeners.add(listener)
+   192→  return () => { storeListeners.delete(listener) }
+   193→}
+   194→
+   195→function getSnapshot(): JobsSnapshot {
+   196→  return snapshot
+   197→}
+   198→
+   199→function getServerSnapshot(): JobsSnapshot {
+   200→  return { jobs: [], appCounts: {}, loading: true }
+   201→}
+   202→
+   203→/** Fetch jobs + app counts and push into the external store */
+   204→async function fetchJobsIntoStore(employerId: string) {
+   205→  snapshot = { ...snapshot, loading: true }
+   206→  emitSnapshotChange()
+   207→
+   208→  const supabase = createClient()
+   209→
+   210→  const { data: jobsData, error: jobsErr } = await supabase
+   211→    .from('jobs')
+   212→    .select('*')
+   213→    .eq('employer_id', employerId)
+   214→    .order('created_at', { ascending: false })
+   215→
+   216→  if (jobsErr) {
+   217→    snapshot = { ...snapshot, loading: false }
+   218→    emitSnapshotChange()
+   219→    return
+   220→  }
+   221→
+   222→  const rows = (jobsData as JobRow[]) ?? []
+   223→
+   224→  if (rows.length === 0) {
+   225→    snapshot = { jobs: [], appCounts: {}, loading: false }
+   226→    emitSnapshotChange()
+   227→    return
+   228→  }
+   229→
+   230→  const jobIds = rows.map((j) => j.id)
+   231→
+   232→  const { data: appsData } = await supabase
+   233→    .from('applications')
+   234→    .select('job_id')
+   235→    .in('job_id', jobIds)
+   236→
+   237→  const counts: Record<string, number> = {}
+   238→  for (const app of appsData ?? []) {
+   239→    counts[app.job_id] = (counts[app.job_id] || 0) + 1
+   240→  }
+   241→
+   242→  snapshot = { jobs: rows, appCounts: counts, loading: false }
+   243→  emitSnapshotChange()
+   244→}
+   245→
+   246→/* ------------------------------------------------------------------ */
+   247→/*  Component                                                          */
+   248→/* ------------------------------------------------------------------ */
+   249→
+   250→export default function EmployerVacancies() {
+   251→  const user = useAppStore((s) => s.user)
+   252→  const navigate = useAppStore((s) => s.navigate)
+   253→
+   254→  /* ---- external store (no setState in effects) ---- */
+   255→  const store = useSyncExternalStore(
+   256→    subscribeToSnapshot,
+   257→    getSnapshot,
+   258→    getServerSnapshot,
+   259→  )
+   260→
+   261→  /* ---- ui state ---- */
+   262→  const [search, setSearch] = useState('')
+   263→  const [statusFilter, setStatusFilter] = useState('all')
+   264→  const [dialogOpen, setDialogOpen] = useState(false)
+   265→  const [editingJob, setEditingJob] = useState<JobRow | null>(null)
+   266→  const [form, setForm] = useState<VacancyForm>(EMPTY_FORM)
+   267→  const [submitting, setSubmitting] = useState(false)
+   268→
+   269→  /* ================================================================ */
+   270→  /*  Subscribe to external store & trigger initial fetch              */
+   271→  /* ================================================================ */
+   272→
+   273→  useEffect(() => {
+   274→    if (!user?.id) return
+   275→    fetchJobsIntoStore(user.id)
+   276→  }, [user])
+   277→
+   278→  /* ================================================================ */
+   279→  /*  Filtered / searched list                                         */
+   280→  /* ================================================================ */
+   281→
+   282→  const filtered = store.jobs.filter((v) => {
+   283→    const q = search.toLowerCase()
+   284→    const matchSearch =
+   285→      v.title.toLowerCase().includes(q) ||
+   286→      (v.location ?? '').toLowerCase().includes(q)
+   287→    const matchStatus = statusFilter === 'all' || v.status === statusFilter
+   288→    return matchSearch && matchStatus
+   289→  })
+   290→
+   291→  /* ================================================================ */
+   292→  /*  Dialog helpers                                                   */
+   293→  /* ================================================================ */
+   294→
+   295→  function openCreateDialog() {
+   296→    setEditingJob(null)
+   297→    setForm(EMPTY_FORM)
+   298→    setDialogOpen(true)
+   299→  }
+   300→
+   301→  function openEditDialog(job: JobRow) {
+   302→    setEditingJob(job)
+   303→    setForm(jobToForm(job))
+   304→    setDialogOpen(true)
+   305→  }
+   306→
+   307→  function closeDialog() {
+   308→    setDialogOpen(false)
+   309→    setEditingJob(null)
+   310→    setForm(EMPTY_FORM)
+   311→  }
+   312→
+   313→  /* ================================================================ */
+   314→  /*  Submit (create / update)                                         */
+   315→  /* ================================================================ */
+   316→
+   317→  async function handleSubmit(status: 'draft' | 'active') {
+   318→    if (!form.title.trim()) {
+   319→      toast.error('Job title is required')
+   320→      return
+   321→    }
+   322→    if (!form.listing.trim()) {
+   323→      toast.error('Job description (listing) is required')
+   324→      return
+   325→    }
+   326→
+   327→    setSubmitting(true)
+   328→    const supabase = createClient()
+   329→
+   330→    const payload = {
+   331→      employer_id: user!.id,
+   332→      title: form.title.trim(),
+   333→      listing: form.listing.trim(),
+   334→      requirements: form.requirements.trim() || null,
+   335→      location: form.location.trim() || null,
+   336→      salary_min: form.salary_min ? Number(form.salary_min) : null,
+   337→      salary_max: form.salary_max ? Number(form.salary_max) : null,
+   338→      job_type: form.job_type || null,
+   339→      sector: form.sector.trim() || null,
+   340→      description: form.listing.trim(),
+   341→      status,
+   342→    }
+   343→
+   344→    if (editingJob) {
+   345→      const { error } = await supabase
+   346→        .from('jobs')
+   347→        .update(payload)
+   348→        .eq('id', editingJob.id)
+   349→
+   350→      if (error) {
+   351→        toast.error('Failed to update vacancy')
+   352→        setSubmitting(false)
+   353→        return
+   354→      }
+   355→      toast.success('Vacancy updated successfully')
+   356→    } else {
+   357→      const { error } = await supabase.from('jobs').insert(payload)
+   358→
+   359→      if (error) {
+   360→        toast.error('Failed to create vacancy')
+   361→        setSubmitting(false)
+   362→        return
+   363→      }
+   364→      toast.success(
+   365→        status === 'draft'
+   366→          ? 'Vacancy saved as draft'
+   367→          : 'Vacancy published successfully',
+   368→      )
+   369→    }
+   370→
+   371→    setSubmitting(false)
+   372→    closeDialog()
+   373→    if (user?.id) fetchJobsIntoStore(user.id)
+   374→  }
+   375→
+   376→  /* ================================================================ */
+   377→  /*  Status toggle                                                    */
+   378→  /* ================================================================ */
+   379→
+   380→  async function updateStatus(jobId: string, newStatus: string) {
+   381→    const supabase = createClient()
+   382→    const { error } = await supabase
+   383→      .from('jobs')
+   384→      .update({ status: newStatus })
+   385→      .eq('id', jobId)
+   386→
+   387→    if (error) {
+   388→      toast.error(
+   389→        `Failed to ${newStatus === 'active' ? 'reopen' : newStatus} vacancy`,
+   390→      )
+   391→      return
+   392→    }
+   393→
+   394→    const label =
+   395→      newStatus === 'active'
+   396→        ? 'reopened'
+   397→        : newStatus === 'paused'
+   398→          ? 'paused'
+   399→          : 'closed'
+   400→    toast.success(`Vacancy ${label} successfully`)
+   401→    if (user?.id) fetchJobsIntoStore(user.id)
+   402→  }
+   403→
+   404→  /* ================================================================ */
+   405→  /*  Render                                                           */
+   406→  /* ================================================================ */
+   407→
+   408→  if (store.loading) return <PageSkeleton />
+   409→
+   410→  return (
+   411→    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
+   412→      {/* ---- Header ---- */}
+   413→      <motion.div
+   414→        initial={{ opacity: 0, y: -10 }}
+   415→        animate={{ opacity: 1, y: 0 }}
+   416→        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+   417→      >
+   418→        <div>
+   419→          <h1 className="text-2xl sm:text-3xl font-bold text-[#0B1D33]">
+   420→            Vacancies
+   421→          </h1>
+   422→          <p className="text-[#5A6B7F] mt-0.5">
+   423→            Manage your job listings and create new ones
+   424→          </p>
+   425→        </div>
+   426→        <Button
+   427→          className="bg-[#C4942A] hover:bg-[#B3861F] text-white self-start"
+   428→          onClick={openCreateDialog}
+   429→        >
+   430→          <Plus className="w-4 h-4 mr-2" /> Create Vacancy
+   431→        </Button>
+   432→      </motion.div>
+   433→
+   434→      {/* ---- Filter bar ---- */}
+   435→      <motion.div
+   436→        initial={{ opacity: 0, y: 10 }}
+   437→        animate={{ opacity: 1, y: 0 }}
+   438→        transition={{ delay: 0.1 }}
+   439→        className="flex flex-col sm:flex-row gap-3"
+   440→      >
+   441→        <div className="relative flex-1">
+   442→          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5A6B7F]" />
+   443→          <Input
+   444→            placeholder="Search by title or location…"
+   445→            value={search}
+   446→            onChange={(e) => setSearch(e.target.value)}
+   447→            className="pl-10 border-[#D1D9E6] focus-visible:ring-[#C4942A]/30 bg-[#F7F9FC]"
+   448→          />
+   449→        </div>
+   450→        <Select value={statusFilter} onValueChange={setStatusFilter}>
+   451→          <SelectTrigger className="w-full sm:w-44 border-[#D1D9E6] bg-[#F7F9FC]">
+   452→            <Filter className="w-4 h-4 mr-2 text-[#5A6B7F]" />
+   453→            <SelectValue placeholder="Filter status" />
+   454→          </SelectTrigger>
+   455→          <SelectContent>
+   456→            {STATUS_OPTIONS.map((o) => (
+   457→              <SelectItem key={o.value} value={o.value}>
+   458→                {o.label}
+   459→              </SelectItem>
+   460→            ))}
+   461→          </SelectContent>
+   462→        </Select>
+   463→      </motion.div>
+   464→
+   465→      {/* ---- Vacancy list ---- */}
+   466→      <div className="space-y-3">
+   467→        <AnimatePresence>
+   468→          {filtered.map((v, i) => (
+   469→            <motion.div
+   470→              key={v.id}
+   471→              initial={{ opacity: 0, y: 10 }}
+   472→              animate={{ opacity: 1, y: 0 }}
+   473→              exit={{ opacity: 0, y: -10 }}
+   474→              transition={{ delay: i * 0.04 }}
+   475→            >
+   476→              <Card className="border-[#D1D9E6] hover:shadow-md transition-shadow bg-[#F7F9FC]">
+   477→                <CardContent className="p-4">
+   478→                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+   479→                    {/* Left info */}
+   480→                    <div className="flex-1 min-w-0">
+   481→                      <div className="flex items-center gap-2 flex-wrap">
+   482→                        <h3 className="font-semibold text-[#0B1D33]">
+   483→                          {v.title}
+   484→                        </h3>
+   485→                        <Badge
+   486→                          variant="secondary"
+   487→                          className={
+   488→                            STATUS_STYLES[v.status] ??
+   489→                            'bg-gray-100 text-gray-600'
+   490→                          }
+   491→                        >
+   492→                          {v.status.charAt(0).toUpperCase() +
+   493→                            v.status.slice(1)}
+   494→                        </Badge>
+   495→                        {v.job_type && (
+   496→                          <Badge
+   497→                            variant="outline"
+   498→                            className="border-[#D1D9E6] text-[#5A6B7F]"
+   499→                          >
+   500→                            {v.job_type
+   501→                              .split('-')
+   502→                              .map(
+   503→                                (w) => w.charAt(0).toUpperCase() + w.slice(1),
+   504→                              )
+   505→                              .join('-')}
+   506→                          </Badge>
+   507→                        )}
+   508→                      </div>
+   509→                      <div className="flex flex-wrap items-center gap-4 mt-1.5 text-xs text-[#5A6B7F]">
+   510→                        {v.location && (
+   511→                          <span className="flex items-center gap-1">
+   512→                            <MapPin className="w-3.5 h-3.5" /> {v.location}
+   513→                          </span>
+   514→                        )}
+   515→                        <span className="flex items-center gap-1">
+   516→                          <Users className="w-3.5 h-3.5" />{' '}
+   517→                          {store.appCounts[v.id] ?? 0} applications
+   518→                        </span>
+   519→                        <span className="flex items-center gap-1">
+   520→                          <Calendar className="w-3.5 h-3.5" />{' '}
+   521→                          {formatDate(v.created_at)}
+   522→                        </span>
+   523→                      </div>
+   524→                    </div>
+   525→
+   526→                    {/* Right actions */}
+   527→                    <div className="flex items-center gap-2 shrink-0">
+   528→                      <Button
+   529→                        variant="outline"
+   530→                        size="sm"
+   531→                        className="border-[#D1D9E6] text-[#1A3A5C] hover:bg-[#F0F4F8]"
+   532→                        onClick={() => navigate('employer-applications')}
+   533→                      >
+   534→                        <UserCircle className="w-3.5 h-3.5 mr-1" /> Applicants
+   535→                      </Button>
+   536→
+   537→                      <DropdownMenu>
+   538→                        <DropdownMenuTrigger asChild>
+   539→                          <Button
+   540→                            variant="ghost"
+   541→                            size="icon"
+   542→                            className="text-[#5A6B7F]"
+   543→                          >
+   544→                            <MoreHorizontal className="w-4 h-4" />
+   545→                          </Button>
+   546→                        </DropdownMenuTrigger>
+   547→                        <DropdownMenuContent align="end">
+   548→                          <DropdownMenuItem
+   549→                            onClick={() => navigate('employer-applications')}
+   550→                          >
+   551→                            <Eye className="w-4 h-4 mr-2" /> View
+   552→                          </DropdownMenuItem>
+   553→                          <DropdownMenuItem
+   554→                            onClick={() => openEditDialog(v)}
+   555→                          >
+   556→                            <Pencil className="w-4 h-4 mr-2" /> Edit
+   557→                          </DropdownMenuItem>
+   558→
+   559→                          {/* Status toggle actions */}
+   560→                          {v.status === 'active' && (
+   561→                            <>
+   562→                              <DropdownMenuSeparator />
+   563→                              <DropdownMenuItem
+   564→                                onClick={() => updateStatus(v.id, 'paused')}
+   565→                              >
+   566→                                <Pause className="w-4 h-4 mr-2" /> Pause
+   567→                              </DropdownMenuItem>
+   568→                              <DropdownMenuItem
+   569→                                onClick={() => updateStatus(v.id, 'closed')}
+   570→                              >
+   571→                                <XCircle className="w-4 h-4 mr-2" /> Close
+   572→                              </DropdownMenuItem>
+   573→                            </>
+   574→                          )}
+   575→                          {v.status === 'paused' && (
+   576→                            <>
+   577→                              <DropdownMenuSeparator />
+   578→                              <DropdownMenuItem
+   579→                                onClick={() => updateStatus(v.id, 'active')}
+   580→                              >
+   581→                                <Play className="w-4 h-4 mr-2" /> Reopen
+   582→                              </DropdownMenuItem>
+   583→                              <DropdownMenuItem
+   584→                                onClick={() => updateStatus(v.id, 'closed')}
+   585→                              >
+   586→                                <XCircle className="w-4 h-4 mr-2" /> Close
+   587→                              </DropdownMenuItem>
+   588→                            </>
+   589→                          )}
+   590→                          {v.status === 'closed' && (
+   591→                            <>
+   592→                              <DropdownMenuSeparator />
+   593→                              <DropdownMenuItem
+   594→                                onClick={() => updateStatus(v.id, 'active')}
+   595→                              >
+   596→                                <Play className="w-4 h-4 mr-2" /> Reopen
+   597→                              </DropdownMenuItem>
+   598→                            </>
+   599→                          )}
+   600→                          {v.status === 'draft' && (
+   601→                            <>
+   602→                              <DropdownMenuSeparator />
+   603→                              <DropdownMenuItem
+   604→                                onClick={() => updateStatus(v.id, 'active')}
+   605→                              >
+   606→                                <Play className="w-4 h-4 mr-2" /> Publish
+   607→                              </DropdownMenuItem>
+   608→                            </>
+   609→                          )}
+   610→                        </DropdownMenuContent>
+   611→                      </DropdownMenu>
+   612→                    </div>
+   613→                  </div>
+   614→                </CardContent>
+   615→              </Card>
+   616→            </motion.div>
+   617→          ))}
+   618→        </AnimatePresence>
+   619→
+   620→        {filtered.length === 0 && (
+   621→          <div className="text-center py-12 text-[#5A6B7F]">
+   622→            <p className="text-lg font-medium">No vacancies found</p>
+   623→            <p className="text-sm mt-1">
+   624→              Try adjusting your search or filter criteria
+   625→            </p>
+   626→          </div>
+   627→        )}
+   628→      </div>
+   629→
+   630→      {/* ================================================================ */}
+   631→      {/*  Create / Edit Dialog                                            */}
+   632→      {/* ================================================================ */}
+   633→      <Dialog
+   634→        open={dialogOpen}
+   635→        onOpenChange={(open) => !open && closeDialog()}
+   636→      >
+   637→        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto border-[#D1D9E6] bg-white">
+   638→          <DialogHeader>
+   639→            <DialogTitle className="text-[#0B1D33] flex items-center gap-2">
+   640→              {editingJob ? (
+   641→                <Pencil className="w-5 h-5 text-[#C4942A]" />
+   642→              ) : (
+   643→                <Plus className="w-5 h-5 text-[#C4942A]" />
+   644→              )}
+   645→              {editingJob ? 'Edit Vacancy' : 'Create Vacancy'}
+   646→            </DialogTitle>
+   647→          </DialogHeader>
+   648→
+   649→          <form
+   650→            onSubmit={(e: FormEvent) => {
+   651→              e.preventDefault()
+   652→            }}
+   653→            className="space-y-4 pt-2"
+   654→          >
+   655→            {/* Title */}
+   656→            <div className="space-y-2">
+   657→              <Label>
+   658→                Job Title <span className="text-red-500">*</span>
+   659→              </Label>
+   660→              <Input
+   661→                placeholder="e.g. Staff Nurse – ICU"
+   662→                value={form.title}
+   663→                onChange={(e) =>
+   664→                  setForm((f) => ({ ...f, title: e.target.value }))
+   665→                }
+   666→                className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30 bg-[#F7F9FC]"
+   667→              />
+   668→            </div>
+   669→
+   670→            {/* Listing / Description */}
+   671→            <div className="space-y-2">
+   672→              <Label>
+   673→                Description <span className="text-red-500">*</span>
+   674→              </Label>
+   675→              <Textarea
+   676→                placeholder="Describe the role, responsibilities, and what makes it unique…"
+   677→                rows={4}
+   678→                value={form.listing}
+   679→                onChange={(e) =>
+   680→                  setForm((f) => ({ ...f, listing: e.target.value }))
+   681→                }
+   682→                className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30 bg-[#F7F9FC]"
+   683→              />
+   684→            </div>
+   685→
+   686→            {/* Requirements */}
+   687→            <div className="space-y-2">
+   688→              <Label>Requirements</Label>
+   689→              <Textarea
+   690→                placeholder="Essential and desirable qualifications, skills, and experience…"
+   691→                rows={3}
+   692→                value={form.requirements}
+   693→                onChange={(e) =>
+   694→                  setForm((f) => ({ ...f, requirements: e.target.value }))
+   695→                }
+   696→                className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30 bg-[#F7F9FC]"
+   697→              />
+   698→            </div>
+   699→
+   700→            {/* Location */}
+   701→            <div className="space-y-2">
+   702→              <Label>Location</Label>
+   703→              <Input
+   704→                placeholder="e.g. London, EC1A"
+   705→                value={form.location}
+   706→                onChange={(e) =>
+   707→                  setForm((f) => ({ ...f, location: e.target.value }))
+   708→                }
+   709→                className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30 bg-[#F7F9FC]"
+   710→              />
+   711→            </div>
+   712→
+   713→            {/* Salary range */}
+   714→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   715→              <div className="space-y-2">
+   716→                <Label>Salary Min (£)</Label>
+   717→                <Input
+   718→                  placeholder="28000"
+   719→                  type="number"
+   720→                  min="0"
+   721→                  value={form.salary_min}
+   722→                  onChange={(e) =>
+   723→                    setForm((f) => ({ ...f, salary_min: e.target.value }))
+   724→                  }
+   725→                  className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30 bg-[#F7F9FC]"
+   726→                />
+   727→              </div>
+   728→              <div className="space-y-2">
+   729→                <Label>Salary Max (£)</Label>
+   730→                <Input
+   731→                  placeholder="35000"
+   732→                  type="number"
+   733→                  min="0"
+   734→                  value={form.salary_max}
+   735→                  onChange={(e) =>
+   736→                    setForm((f) => ({ ...f, salary_max: e.target.value }))
+   737→                  }
+   738→                  className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30 bg-[#F7F9FC]"
+   739→                />
+   740→              </div>
+   741→            </div>
+   742→
+   743→            {/* Job type & Sector */}
+   744→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   745→              <div className="space-y-2">
+   746→                <Label>Job Type</Label>
+   747→                <Select
+   748→                  value={form.job_type}
+   749→                  onValueChange={(val) =>
+   750→                    setForm((f) => ({ ...f, job_type: val }))
+   751→                  }
+   752→                >
+   753→                  <SelectTrigger className="border-[#D1D9E6] bg-[#F7F9FC]">
+   754→                    <SelectValue placeholder="Select type" />
+   755→                  </SelectTrigger>
+   756→                  <SelectContent>
+   757→                    {JOB_TYPE_OPTIONS.map((o) => (
+   758→                      <SelectItem key={o.value} value={o.value}>
+   759→                        {o.label}
+   760→                      </SelectItem>
+   761→                    ))}
+   762→                  </SelectContent>
+   763→                </Select>
+   764→              </div>
+   765→              <div className="space-y-2">
+   766→                <Label>Sector</Label>
+   767→                <Input
+   768→                  placeholder="e.g. Healthcare"
+   769→                  value={form.sector}
+   770→                  onChange={(e) =>
+   771→                    setForm((f) => ({ ...f, sector: e.target.value }))
+   772→                  }
+   773→                  className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30 bg-[#F7F9FC]"
+   774→                />
+   775→              </div>
+   776→            </div>
+   777→
+   778→            {/* Action buttons */}
+   779→            <div className="flex justify-end gap-3 pt-2">
+   780→              <Button
+   781→                type="button"
+   782→                variant="outline"
+   783→                className="border-[#D1D9E6]"
+   784→                onClick={closeDialog}
+   785→              >
+   786→                Cancel
+   787→              </Button>
+   788→              <Button
+   789→                type="button"
+   790→                className="bg-[#C4942A] hover:bg-[#B3861F] text-white"
+   791→                disabled={submitting}
+   792→                onClick={() => handleSubmit('draft')}
+   793→              >
+   794→                {submitting && (
+   795→                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+   796→                )}
+   797→                Save as Draft
+   798→              </Button>
+   799→              <Button
+   800→                type="button"
+   801→                className="bg-[#0B1D33] hover:bg-[#1A3A5C] text-white"
+   802→                disabled={submitting}
+   803→                onClick={() => handleSubmit('active')}
+   804→              >
+   805→                {submitting && (
+   806→                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+   807→                )}
+   808→                {editingJob ? 'Update & Publish' : 'Publish'}
+   809→              </Button>
+   810→            </div>
+   811→          </form>
+   812→        </DialogContent>
+   813→      </Dialog>
+   814→    </div>
+   815→  )
+   816→}
+   817→

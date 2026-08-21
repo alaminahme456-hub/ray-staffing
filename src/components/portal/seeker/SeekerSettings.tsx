@@ -38,6 +38,15 @@ interface ProfileData {
   created_at: string
 }
 
+function formatDateLong(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleDateString('en-GB', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
+}
+
 function PageSkeleton() {
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -89,11 +98,7 @@ export default function SeekerSettings() {
   if (loading) return <PageSkeleton />
 
   const memberSince = profile?.created_at
-    ? new Date(profile.created_at).toLocaleDateString('en-GB', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      })
+    ? formatDateLong(profile.created_at)
     : 'N/A'
 
   function handleSignOut() {

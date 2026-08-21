@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useMemo, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   CalendarDays,
@@ -16,7 +16,8 @@ import {
   CheckCircle2,
   XCircle,
   MinusCircle,
-  ChevronDown,
+  Save,
+  Loader2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -39,48 +40,82 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import { createClient } from '@/lib/supabase/client'
 import { useAppStore } from '@/store/app-store'
+import { toast } from 'sonner'
 
-interface Interview {
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+
+type InterviewStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show'
+
+type InterviewType = 'Video' | 'Phone' | 'In-person'
+
+interface InterviewRow {
   id: string
-  candidate: string
-  job: string
-  date: string
-  time: string
-  duration: string
-  type: 'Phone' | 'Video' | 'In-person'
-  status: 'Scheduled' | 'Completed' | 'Cancelled'
-  location: string
-  notes?: string
+  application_id: string
+  candidate_name: string
+  job_title: string
+  candidate_id: string
+  scheduled_at: string
+  duration_min: number | null
+  location: string | null
+  meeting_link: string | null
+  status: InterviewStatus
+  interviewer_notes: string | null
 }
 
-const interviews: Interview[] = [
-  { id: 'I-001', candidate: 'Emma Worthington', job: 'Radiographer', date: '20 Aug 2026', time: '10:00 AM', duration: '45 min', type: 'Video', status: 'Scheduled', location: 'Microsoft Teams – link sent via email' },
-  { id: 'I-002', candidate: 'Kwame Asante', job: 'Mental Health Nurse', date: '20 Aug 2026', time: '2:00 PM', duration: '30 min', type: 'Phone', status: 'Scheduled', location: '07700 900 123' },
-  { id: 'I-003', candidate: 'Aisha Patel', job: 'Staff Nurse – ICU', date: '21 Aug 2026', time: '11:30 AM', duration: '60 min', type: 'In-person', status: 'Scheduled', location: 'Barts Health, Royal London Hospital, Interview Room 4B' },
-  { id: 'I-004', candidate: 'James Okafor', job: 'Senior Physiotherapist', date: '15 Aug 2026', time: '9:00 AM', duration: '45 min', type: 'Video', status: 'Completed', location: 'Zoom Meeting' },
-  { id: 'I-005', candidate: 'Raj Mehta', job: 'Staff Nurse – ICU', date: '12 Aug 2026', time: '3:00 PM', duration: '30 min', type: 'Phone', status: 'Cancelled', location: 'N/A' },
-]
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
 
-const typeIcon = (type: string) => {
-  switch (type) {
-    case 'Video': return <Video className="w-4 h-4" />
-    case 'Phone': return <Phone className="w-4 h-4" />
-    default: return <MapPin className="w-4 h-4" />
-  }
+const STATUS_CONFIG: Record<InterviewStatus, { label: string; bg: string }> = {
+  scheduled: { label: 'Scheduled', bg: 'bg-blue-100 text-blue-700' },
+  completed: { label: 'Completed', bg: 'bg-emerald-100 text-emerald-700' },
+  cancelled: { label: 'Cancelled', bg: 'bg-red-100 text-red-700' },
+  no_show: { label: 'No Show', bg: 'bg-amber-100 text-amber-700' },
 }
 
-const typeColor: Record<string, string> = {
-  Video: 'bg-purple-100 text-purple-700',
-  Phone: 'bg-blue-100 text-blue-700',
-  'In-person': 'bg-emerald-100 text-emerald-700',
+const TYPE_CONFIG: Record<string, { label: string; bg: string; icon: typeof Video }> = {
+  Video: { label: 'Video', bg: 'bg-purple-100 text-purple-700', icon: Video },
+  Phone: { label: 'Phone', bg: 'bg-blue-100 text-blue-700', icon: Phone },
+  'In-person': { label: 'In-person', bg: 'bg-emerald-100 text-emerald-700', icon: MapPin },
 }
 
-const statusColor: Record<string, string> = {
-  Scheduled: 'bg-blue-100 text-blue-700',
-  Completed: 'bg-emerald-100 text-emerald-700',
-  Cancelled: 'bg-red-100 text-red-700',
+const TYPE_FROM_LOCATION = (location: string | null, link: string | null): InterviewType => {
+  if (link) return 'Video'
+  if (!location) return 'Phone'
+  return 'In-person'
 }
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function formatDuration(min: number | null): string {
+  if (!min) return '—'
+  return `${min} min`
+}
+
+/* ------------------------------------------------------------------ */
+/*  Loading skeleton                                                   */
+/* ------------------------------------------------------------------ */
 
 function PageSkeleton() {
   return (
@@ -91,30 +126,248 @@ function PageSkeleton() {
   )
 }
 
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
+
 export default function EmployerInterviews() {
+  const supabase = useMemo(() => createClient(), [])
+  const user = useAppStore((s) => s.user)
+
+  const [interviews, setInterviews] = useState<InterviewRow[]>([])
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list')
   const [showSchedule, setShowSchedule] = useState(false)
-  const [showFeedback, setShowFeedback] = useState(false)
-  const [feedbackInterview, setFeedbackInterview] = useState<Interview | null>(null)
-  const [feedbackRating, setFeedbackRating] = useState(0)
-  const [feedbackRecommend, setFeedbackRecommend] = useState('')
-  const navigate = useAppStore((s) => s.navigate)
+  const [showNotes, setShowNotes] = useState(false)
+  const [selectedInterview, setSelectedInterview] = useState<InterviewRow | null>(null)
+  const [notesDraft, setNotesDraft] = useState('')
+  const [savingNotes, setSavingNotes] = useState(false)
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
 
-  useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 500)
-    return () => clearTimeout(t)
-  }, [])
+  /* Schedule form state */
+  const [schedApplicationId, setSchedApplicationId] = useState('')
+  const [schedDate, setSchedDate] = useState('')
+  const [schedTime, setSchedTime] = useState('')
+  const [schedDuration, setSchedDuration] = useState('30')
+  const [schedLocation, setSchedLocation] = useState('')
+  const [schedNotes, setSchedNotes] = useState('')
+  const [scheduling, setScheduling] = useState(false)
 
-  const scheduled = interviews.filter(i => i.status === 'Scheduled')
-  const completed = interviews.filter(i => i.status === 'Completed')
+  /* Available applications for scheduling */
+  const [availableApps, setAvailableApps] = useState<{ id: string; candidate_name: string; job_title: string }[]>([])
 
-  const openFeedback = (intv: Interview) => {
-    setFeedbackInterview(intv)
-    setShowFeedback(true)
+  const hasFetched = useRef(false)
+
+  async function fetchInterviews() {
+    if (!user?.id) return
+    try {
+      const { data: jobs, error: jobsErr } = await supabase
+        .from('jobs')
+        .select('id, title')
+        .eq('employer_id', user.id)
+      if (jobsErr) throw jobsErr
+
+      if (!jobs || jobs.length === 0) {
+        setInterviews([])
+        setAvailableApps([])
+        return
+      }
+
+      const jobMap = new Map(jobs.map((j) => [j.id, j.title]))
+      const jobIds = jobs.map((j) => j.id)
+
+      const { data: applications, error: appErr } = await supabase
+        .from('applications')
+        .select('id, candidate_id, job_id, status')
+        .in('job_id', jobIds)
+      if (appErr) throw appErr
+
+      const apps = applications || []
+      const appMap = new Map(apps.map((a) => [a.id, a]))
+      const appIds = apps.map((a) => a.id)
+
+      /* Fetch available applications for scheduling (shortlisted/interviewing) */
+      const schedulable = apps
+        .filter((a) => a.status === 'shortlisted' || a.status === 'interviewing')
+      const schedCandidateIds = [...new Set(schedulable.map((a) => a.candidate_id))]
+      const { data: schedProfiles } = await supabase
+        .from('profiles')
+        .select('id, name')
+        .in('id', schedCandidateIds)
+      const schedProfileMap = new Map((schedProfiles || []).map((p) => [p.id, p.name]))
+      setAvailableApps(
+        schedulable.map((a) => ({
+          id: a.id,
+          candidate_name: schedProfileMap.get(a.candidate_id) || 'Unknown',
+          job_title: jobMap.get(a.job_id) || 'Unknown',
+        }))
+      )
+
+      if (appIds.length === 0) {
+        setInterviews([])
+        return
+      }
+
+      const { data: interviewsData, error: intErr } = await supabase
+        .from('interviews')
+        .select('id, application_id, scheduled_at, duration_min, location, meeting_link, status, interviewer_notes')
+        .in('application_id', appIds)
+        .order('scheduled_at', { ascending: false })
+      if (intErr) throw intErr
+
+      if (!interviewsData || interviewsData.length === 0) {
+        setInterviews([])
+        return
+      }
+
+      const candidateIds = [
+        ...new Set(
+          interviewsData
+            .map((inv) => appMap.get(inv.application_id)?.candidate_id)
+            .filter(Boolean) as string[]
+        ),
+      ]
+      const { data: profiles, error: profErr } = await supabase
+        .from('profiles')
+        .select('id, name')
+        .in('id', candidateIds)
+      if (profErr) throw profErr
+
+      const profileMap = new Map((profiles || []).map((p) => [p.id, p.name]))
+
+      const rows: InterviewRow[] = interviewsData.map((inv) => {
+        const app = appMap.get(inv.application_id)
+        return {
+          ...inv,
+          candidate_name: app ? (profileMap.get(app.candidate_id) || 'Unknown Candidate') : 'Unknown Candidate',
+          job_title: app ? (jobMap.get(app.job_id) || 'Unknown Job') : 'Unknown Job',
+          candidate_id: app?.candidate_id || '',
+        }
+      })
+
+      setInterviews(rows)
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to load interviews')
+    } finally {
+      setLoading(false)
+    }
   }
 
+  if (!hasFetched.current && user?.id) {
+    hasFetched.current = true
+    fetchInterviews()
+  }
+
+  /* ---- handlers ---- */
+
+  const updateInterviewStatus = useCallback(
+    async (interviewId: string, newStatus: InterviewStatus) => {
+      setUpdatingStatus(interviewId)
+      try {
+        const { error } = await supabase
+          .from('interviews')
+          .update({ status: newStatus })
+          .eq('id', interviewId)
+        if (error) throw error
+        setInterviews((prev) =>
+          prev.map((inv) =>
+            inv.id === interviewId ? { ...inv, status: newStatus } : inv
+          )
+        )
+        toast.success(`Interview marked as ${STATUS_CONFIG[newStatus].label}`)
+      } catch {
+        toast.error('Failed to update interview status')
+      } finally {
+        setUpdatingStatus(null)
+      }
+    },
+    [supabase]
+  )
+
+  const openNotes = useCallback((intv: InterviewRow) => {
+    setSelectedInterview(intv)
+    setNotesDraft(intv.interviewer_notes || '')
+    setShowNotes(true)
+  }, [])
+
+  const saveNotes = useCallback(async () => {
+    if (!selectedInterview) return
+    setSavingNotes(true)
+    try {
+      const { error } = await supabase
+        .from('interviews')
+        .update({ interviewer_notes: notesDraft || null })
+        .eq('id', selectedInterview.id)
+      if (error) throw error
+      setInterviews((prev) =>
+        prev.map((inv) =>
+          inv.id === selectedInterview.id
+            ? { ...inv, interviewer_notes: notesDraft || null }
+            : inv
+        )
+      )
+      toast.success('Notes saved successfully')
+      setShowNotes(false)
+    } catch {
+      toast.error('Failed to save notes')
+    } finally {
+      setSavingNotes(false)
+    }
+  }, [supabase, selectedInterview, notesDraft])
+
+  const handleSchedule = useCallback(async () => {
+    if (!schedApplicationId || !schedDate || !schedTime || !user?.id) return
+    setScheduling(true)
+    try {
+      const scheduledAt = new Date(`${schedDate}T${schedTime}`).toISOString()
+      const isVideo = schedLocation.startsWith('http')
+      const { error } = await supabase.from('interviews').insert({
+        application_id: schedApplicationId,
+        scheduled_at: scheduledAt,
+        duration_min: parseInt(schedDuration) || 30,
+        location: isVideo ? null : schedLocation || null,
+        meeting_link: isVideo ? schedLocation : null,
+        status: 'scheduled',
+        interviewer_notes: schedNotes || null,
+      })
+      if (error) throw error
+      toast.success('Interview scheduled successfully')
+      setShowSchedule(false)
+      setSchedApplicationId('')
+      setSchedDate('')
+      setSchedTime('')
+      setSchedDuration('30')
+      setSchedLocation('')
+      setSchedNotes('')
+      /* Re-fetch */
+      hasFetched.current = false
+      fetchInterviews()
+    } catch {
+      toast.error('Failed to schedule interview')
+    } finally {
+      setScheduling(false)
+    }
+  }, [supabase, schedApplicationId, schedDate, schedTime, schedDuration, schedLocation, schedNotes, user?.id])
+
+  /* ---- derived ---- */
+
+  const scheduled = interviews.filter((i) => i.status === 'scheduled')
+  const completed = interviews.filter((i) => i.status === 'completed')
+  const cancelled = interviews.filter((i) => i.status === 'cancelled')
+  const noShows = interviews.filter((i) => i.status === 'no_show')
+
+  /* ---- early returns ---- */
+
   if (loading) return <PageSkeleton />
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <p className="text-[#5A6B7F]">Please log in to view interviews.</p>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
@@ -163,51 +416,79 @@ export default function EmployerInterviews() {
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
               <h2 className="text-sm font-semibold text-[#5A6B7F] uppercase tracking-wider mb-3">Upcoming ({scheduled.length})</h2>
               <div className="space-y-3">
-                {scheduled.map((intv, i) => (
-                  <motion.div
-                    key={intv.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.12 + i * 0.04 }}
-                  >
-                    <Card className="border-[#D1D9E6] hover:shadow-md transition-shadow">
-                      <CardContent className="p-4">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="font-semibold text-[#0B1D33] text-sm">{intv.candidate}</h3>
-                              <Badge variant="secondary" className={typeColor[intv.type]}>
-                                {typeIcon(intv.type)} {intv.type}
-                              </Badge>
-                              <Badge variant="secondary" className={statusColor[intv.status]}>{intv.status}</Badge>
+                {scheduled.map((intv, i) => {
+                  const intvType = TYPE_FROM_LOCATION(intv.location, intv.meeting_link)
+                  const typeCfg = TYPE_CONFIG[intvType]
+                  const TypeIcon = typeCfg.icon
+                  const isUpdating = updatingStatus === intv.id
+                  return (
+                    <motion.div
+                      key={intv.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.12 + i * 0.04 }}
+                    >
+                      <Card className="border-[#D1D9E6] hover:shadow-md transition-shadow">
+                        <CardContent className="p-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="font-semibold text-[#0B1D33] text-sm">{intv.candidate_name}</h3>
+                                <Badge variant="secondary" className={typeCfg.bg}>
+                                  <TypeIcon className="w-3 h-3 mr-1" /> {typeCfg.label}
+                                </Badge>
+                                <Badge variant="secondary" className={STATUS_CONFIG[intv.status].bg}>{STATUS_CONFIG[intv.status].label}</Badge>
+                              </div>
+                              <p className="text-xs text-[#5A6B7F] mt-1">{intv.job_title}</p>
+                              <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-[#5A6B7F]">
+                                <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{formatDate(intv.scheduled_at)} · {formatTime(intv.scheduled_at)}</span>
+                                <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3" />{formatDuration(intv.duration_min)}</span>
+                                <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{intv.meeting_link || intv.location || '—'}</span>
+                              </div>
                             </div>
-                            <p className="text-xs text-[#5A6B7F] mt-1">{intv.job}</p>
-                            <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-[#5A6B7F]">
-                              <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{intv.date} · {intv.time}</span>
-                              <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3" />{intv.duration}</span>
-                              <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{intv.location}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {(intv.meeting_link) && (
+                                <a href={intv.meeting_link} target="_blank" rel="noopener noreferrer">
+                                  <Button size="sm" className="bg-[#C4942A] hover:bg-[#B3861F] text-white text-xs">
+                                    <ExternalLink className="w-3.5 h-3.5 mr-1" /> Join
+                                  </Button>
+                                </a>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-[#D1D9E6] text-[#1A3A5C] text-xs"
+                                onClick={() => openNotes(intv)}
+                              >
+                                <MessageSquare className="w-3.5 h-3.5 mr-1" /> Notes
+                              </Button>
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-emerald-200 text-emerald-700 text-xs hover:bg-emerald-50"
+                                  disabled={isUpdating}
+                                  onClick={() => updateInterviewStatus(intv.id, 'completed')}
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Done
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-red-200 text-red-600 text-xs hover:bg-red-50"
+                                  disabled={isUpdating}
+                                  onClick={() => updateInterviewStatus(intv.id, 'cancelled')}
+                                >
+                                  <XCircle className="w-3.5 h-3.5 mr-1" /> Cancel
+                                </Button>
+                              </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {intv.type === 'Video' && (
-                              <Button size="sm" className="bg-[#C4942A] hover:bg-[#B3861F] text-white text-xs">
-                                <ExternalLink className="w-3.5 h-3.5 mr-1" /> Join
-                              </Button>
-                            )}
-                            {intv.type === 'In-person' && (
-                              <Button size="sm" variant="outline" className="border-[#D1D9E6] text-[#1A3A5C] text-xs">
-                                <MapPin className="w-3.5 h-3.5 mr-1" /> Directions
-                              </Button>
-                            )}
-                            <Button size="sm" variant="outline" className="border-[#D1D9E6] text-[#1A3A5C] text-xs">
-                              <MessageSquare className="w-3.5 h-3.5 mr-1" /> Message
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                ))}
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  )
+                })}
               </div>
             </motion.div>
           )}
@@ -217,25 +498,60 @@ export default function EmployerInterviews() {
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
               <h2 className="text-sm font-semibold text-[#5A6B7F] uppercase tracking-wider mb-3">Completed ({completed.length})</h2>
               <div className="space-y-3">
-                {completed.map((intv) => (
-                  <Card key={intv.id} className="border-[#D1D9E6]">
-                    <CardContent className="p-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-semibold text-[#0B1D33] text-sm">{intv.candidate}</h3>
-                            <Badge variant="secondary" className={statusColor[intv.status]}>{intv.status}</Badge>
+                {completed.map((intv) => {
+                  const intvType = TYPE_FROM_LOCATION(intv.location, intv.meeting_link)
+                  const typeCfg = TYPE_CONFIG[intvType]
+                  const TypeIcon = typeCfg.icon
+                  return (
+                    <Card key={intv.id} className="border-[#D1D9E6]">
+                      <CardContent className="p-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="font-semibold text-[#0B1D33] text-sm">{intv.candidate_name}</h3>
+                              <Badge variant="secondary" className={typeCfg.bg}>
+                                <TypeIcon className="w-3 h-3 mr-1" /> {typeCfg.label}
+                              </Badge>
+                              <Badge variant="secondary" className={STATUS_CONFIG[intv.status].bg}>{STATUS_CONFIG[intv.status].label}</Badge>
+                            </div>
+                            <p className="text-xs text-[#5A6B7F] mt-1">{intv.job_title} · {formatDate(intv.scheduled_at)} at {formatTime(intv.scheduled_at)}</p>
+                            {intv.interviewer_notes && (
+                              <p className="text-xs text-[#5A6B7F] mt-1 italic">"{intv.interviewer_notes.slice(0, 100)}{intv.interviewer_notes.length > 100 ? '…' : ''}"</p>
+                            )}
                           </div>
-                          <p className="text-xs text-[#5A6B7F] mt-1">{intv.job} · {intv.date} at {intv.time}</p>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-[#D1D9E6] text-[#1A3A5C] text-xs"
+                            onClick={() => openNotes(intv)}
+                          >
+                            <Star className="w-3.5 h-3.5 mr-1" /> View Notes
+                          </Button>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-[#D1D9E6] text-[#1A3A5C] text-xs"
-                          onClick={() => openFeedback(intv)}
-                        >
-                          <Star className="w-3.5 h-3.5 mr-1" /> Leave Feedback
-                        </Button>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Cancelled / No Show */}
+          {(cancelled.length > 0 || noShows.length > 0) && (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
+              <h2 className="text-sm font-semibold text-[#5A6B7F] uppercase tracking-wider mb-3">Cancelled / No Show ({cancelled.length + noShows.length})</h2>
+              <div className="space-y-3">
+                {[...cancelled, ...noShows].map((intv) => (
+                  <Card key={intv.id} className="border-[#D1D9E6] opacity-60">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-[#0B1D33] text-sm line-through">{intv.candidate_name}</h3>
+                            <Badge variant="secondary" className={STATUS_CONFIG[intv.status].bg}>{STATUS_CONFIG[intv.status].label}</Badge>
+                          </div>
+                          <p className="text-xs text-[#5A6B7F] mt-1">{intv.job_title} · {formatDate(intv.scheduled_at)}</p>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -244,27 +560,13 @@ export default function EmployerInterviews() {
             </motion.div>
           )}
 
-          {/* Cancelled */}
-          {interviews.filter(i => i.status === 'Cancelled').length > 0 && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
-              <h2 className="text-sm font-semibold text-[#5A6B7F] uppercase tracking-wider mb-3">Cancelled</h2>
-              <div className="space-y-3">
-                {interviews.filter(i => i.status === 'Cancelled').map((intv) => (
-                  <Card key={intv.id} className="border-[#D1D9E6] opacity-60">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold text-[#0B1D33] text-sm line-through">{intv.candidate}</h3>
-                            <Badge variant="secondary" className={statusColor.Cancelled}>{intv.status}</Badge>
-                          </div>
-                          <p className="text-xs text-[#5A6B7F] mt-1">{intv.job} · {intv.date}</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+          {interviews.length === 0 && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16">
+              <div className="mx-auto w-14 h-14 rounded-full bg-[#F7F9FC] border border-[#D1D9E6] flex items-center justify-center mb-4">
+                <CalendarDays className="w-6 h-6 text-[#5A6B7F]" />
               </div>
+              <p className="text-lg font-semibold text-[#0B1D33]">No interviews yet</p>
+              <p className="text-sm text-[#5A6B7F] mt-1">Schedule your first interview using the button above</p>
             </motion.div>
           )}
         </div>
@@ -273,32 +575,10 @@ export default function EmployerInterviews() {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
           <Card className="border-[#D1D9E6]">
             <CardHeader>
-              <CardTitle className="text-base text-[#0B1D33]">August 2026</CardTitle>
+              <CardTitle className="text-base text-[#0B1D33]">Interview Calendar</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-7 gap-px bg-[#D1D9E6] rounded-lg overflow-hidden">
-                {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => (
-                  <div key={d} className="bg-[#F7F9FC] p-2 text-center text-xs font-medium text-[#5A6B7F]">{d}</div>
-                ))}
-                {Array.from({ length: 6 }).map((_, week) => (
-                  Array.from({ length: 7 }).map((_, day) => {
-                    const dayNum = week * 7 + day + 1
-                    if (dayNum > 31) return <div key={`${week}-${day}`} className="bg-white p-2 min-h-[60px]" />
-                    const hasInterview = interviews.some(i => {
-                      const d = parseInt(i.date.split(' ')[0])
-                      return d === dayNum && i.status === 'Scheduled'
-                    })
-                    return (
-                      <div key={`${week}-${day}`} className={`bg-white p-2 min-h-[60px] ${dayNum === 20 || dayNum === 21 ? 'bg-[#C4942A]/5' : ''}`}>
-                        <span className={`text-xs ${dayNum === 20 || dayNum === 21 ? 'font-bold text-[#C4942A]' : 'text-[#5A6B7F]'}`}>{dayNum}</span>
-                        {hasInterview && (
-                          <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-[#C4942A] mx-auto" />
-                        )}
-                      </div>
-                    )
-                  })
-                ))}
-              </div>
+              <CalendarGrid interviews={scheduled} />
             </CardContent>
           </Card>
         </motion.div>
@@ -314,45 +594,20 @@ export default function EmployerInterviews() {
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="space-y-2">
-              <Label>Candidate *</Label>
-              <Select>
+              <Label>Application / Candidate *</Label>
+              <Select value={schedApplicationId} onValueChange={setSchedApplicationId}>
                 <SelectTrigger className="border-[#D1D9E6]"><SelectValue placeholder="Select candidate" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="c1">Aisha Patel</SelectItem>
-                  <SelectItem value="c2">Emma Worthington</SelectItem>
-                  <SelectItem value="c3">Kwame Asante</SelectItem>
-                  <SelectItem value="c4">Sophie Chambers</SelectItem>
-                  <SelectItem value="c5">Raj Mehta</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Job *</Label>
-              <Select>
-                <SelectTrigger className="border-[#D1D9E6]"><SelectValue placeholder="Select job" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="v1">Staff Nurse – ICU</SelectItem>
-                  <SelectItem value="v2">Senior Physiotherapist</SelectItem>
-                  <SelectItem value="v3">Radiographer</SelectItem>
-                  <SelectItem value="v4">Mental Health Nurse</SelectItem>
+                  {availableApps.map((app) => (
+                    <SelectItem key={app.id} value={app.id}>{app.candidate_name} – {app.job_title}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Type *</Label>
-                <Select>
-                  <SelectTrigger className="border-[#D1D9E6]"><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="phone">Phone</SelectItem>
-                    <SelectItem value="video">Video</SelectItem>
-                    <SelectItem value="inperson">In-person</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
                 <Label>Duration *</Label>
-                <Select>
+                <Select value={schedDuration} onValueChange={setSchedDuration}>
                   <SelectTrigger className="border-[#D1D9E6]"><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="15">15 minutes</SelectItem>
@@ -362,109 +617,146 @@ export default function EmployerInterviews() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label>Location / Meeting Link *</Label>
+                <Input
+                  placeholder="e.g. Zoom link or room number"
+                  value={schedLocation}
+                  onChange={(e) => setSchedLocation(e.target.value)}
+                  className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30"
+                />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Date *</Label>
-                <Input type="date" className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30" />
+                <Input
+                  type="date"
+                  value={schedDate}
+                  onChange={(e) => setSchedDate(e.target.value)}
+                  className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30"
+                />
               </div>
               <div className="space-y-2">
                 <Label>Time *</Label>
-                <Input type="time" className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30" />
+                <Input
+                  type="time"
+                  value={schedTime}
+                  onChange={(e) => setSchedTime(e.target.value)}
+                  className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30"
+                />
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Location / Meeting Link *</Label>
-              <Input placeholder="e.g. Zoom link, room number, phone number" className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30" />
-            </div>
-            <div className="space-y-2">
               <Label>Notes</Label>
-              <Textarea placeholder="Any additional notes for the interviewer or candidate..." rows={3} className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30" />
+              <Textarea
+                placeholder="Any additional notes for the interviewer or candidate..."
+                rows={3}
+                value={schedNotes}
+                onChange={(e) => setSchedNotes(e.target.value)}
+                className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30"
+              />
             </div>
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="outline" className="border-[#D1D9E6]" onClick={() => setShowSchedule(false)}>Cancel</Button>
-              <Button className="bg-[#0B1D33] hover:bg-[#1A3A5C] text-white">Schedule Interview</Button>
+              <Button
+                className="bg-[#0B1D33] hover:bg-[#1A3A5C] text-white"
+                disabled={scheduling || !schedApplicationId || !schedDate || !schedTime}
+                onClick={handleSchedule}
+              >
+                {scheduling ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Scheduling…</> : 'Schedule Interview'}
+              </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Feedback Dialog */}
-      <Dialog open={showFeedback} onOpenChange={setShowFeedback}>
+      {/* Notes Dialog */}
+      <Dialog open={showNotes} onOpenChange={setShowNotes}>
         <DialogContent className="max-w-lg border-[#D1D9E6]">
           <DialogHeader>
-            <DialogTitle className="text-[#0B1D33]">Interview Feedback</DialogTitle>
+            <DialogTitle className="text-[#0B1D33]">Interview Notes</DialogTitle>
           </DialogHeader>
-          {feedbackInterview && (
+          {selectedInterview && (
             <div className="space-y-5 pt-2">
               <div className="bg-[#F7F9FC] rounded-lg p-3 text-sm">
-                <p className="font-medium text-[#0B1D33]">{feedbackInterview.candidate}</p>
-                <p className="text-xs text-[#5A6B7F]">{feedbackInterview.job} · {feedbackInterview.date} at {feedbackInterview.time}</p>
+                <p className="font-medium text-[#0B1D33]">{selectedInterview.candidate_name}</p>
+                <p className="text-xs text-[#5A6B7F]">{selectedInterview.job_title} · {formatDate(selectedInterview.scheduled_at)} at {formatTime(selectedInterview.scheduled_at)}</p>
               </div>
 
               <div className="space-y-2">
-                <Label>Overall Rating</Label>
-                <div className="flex gap-2">
-                  {[1,2,3,4,5].map(n => (
-                    <button
-                      key={n}
-                      onClick={() => setFeedbackRating(n)}
-                      className="w-10 h-10 rounded-lg border border-[#D1D9E6] flex items-center justify-center text-sm font-medium transition-colors hover:bg-[#F0F4F8]"
-                      style={feedbackRating >= n ? { backgroundColor: '#C4942A', color: 'white', borderColor: '#C4942A' } : {}}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Key Strengths</Label>
-                <Textarea placeholder="What impressed you about this candidate?" rows={2} className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30" />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Concerns</Label>
-                <Textarea placeholder="Any areas of concern or further questions?" rows={2} className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30" />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Recommendation *</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {['Hire', 'Maybe', 'No Hire'].map(opt => (
-                    <button
-                      key={opt}
-                      onClick={() => setFeedbackRecommend(opt)}
-                      className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
-                        feedbackRecommend === opt
-                          ? opt === 'Hire' ? 'bg-emerald-100 border-emerald-300 text-emerald-700'
-                            : opt === 'No Hire' ? 'bg-red-100 border-red-300 text-red-700'
-                            : 'bg-amber-100 border-amber-300 text-amber-700'
-                          : 'border-[#D1D9E6] text-[#5A6B7F] hover:bg-[#F7F9FC]'
-                      }`}
-                    >
-                      {opt === 'Hire' && <CheckCircle2 className="w-4 h-4" />}
-                      {opt === 'Maybe' && <MinusCircle className="w-4 h-4" />}
-                      {opt === 'No Hire' && <XCircle className="w-4 h-4" />}
-                      {opt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Additional Notes</Label>
-                <Textarea placeholder="Any other comments..." rows={2} className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30" />
+                <Label>Interviewer Notes</Label>
+                <Textarea
+                  placeholder="Add your interview notes here..."
+                  rows={5}
+                  value={notesDraft}
+                  onChange={(e) => setNotesDraft(e.target.value)}
+                  className="border-[#D1D9E6] focus-visible:ring-[#C4942A]/30"
+                />
               </div>
 
               <div className="flex justify-end gap-3 pt-2">
-                <Button variant="outline" className="border-[#D1D9E6]" onClick={() => setShowFeedback(false)}>Cancel</Button>
-                <Button className="bg-[#C4942A] hover:bg-[#B3861F] text-white">Submit Feedback</Button>
+                <Button variant="outline" className="border-[#D1D9E6]" onClick={() => setShowNotes(false)}>Cancel</Button>
+                <Button
+                  className="bg-[#C4942A] hover:bg-[#B3861F] text-white"
+                  disabled={savingNotes}
+                  onClick={saveNotes}
+                >
+                  {savingNotes ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</> : <><Save className="w-4 h-4 mr-2" /> Save Notes</>}
+                </Button>
               </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  Calendar Grid (local component)                                     */
+/* ------------------------------------------------------------------ */
+
+function CalendarGrid({ interviews }: { interviews: InterviewRow[] }) {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth()
+  const monthName = new Date(year, month).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const firstDayOfWeek = new Date(year, month, 1).getDay()
+  const startOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1 /* Monday start */
+
+  const interviewDays = new Set(
+    interviews.map((inv) => new Date(inv.scheduled_at).getDate())
+  )
+
+  const today = now.getDate()
+  const isCurrentMonth = true
+
+  return (
+    <div className="grid grid-cols-7 gap-px bg-[#D1D9E6] rounded-lg overflow-hidden">
+      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
+        <div key={d} className="bg-[#F7F9FC] p-2 text-center text-xs font-medium text-[#5A6B7F]">{d}</div>
+      ))}
+      {Array.from({ length: startOffset }).map((_, i) => (
+        <div key={`empty-${i}`} className="bg-white p-2 min-h-[60px]" />
+      ))}
+      {Array.from({ length: daysInMonth }).map((_, d) => {
+        const dayNum = d + 1
+        const hasInterview = interviewDays.has(dayNum)
+        const isToday = isCurrentMonth && dayNum === today
+        return (
+          <div
+            key={dayNum}
+            className={`bg-white p-2 min-h-[60px] ${isToday ? 'bg-[#C4942A]/5' : ''}`}
+          >
+            <span className={`text-xs ${isToday ? 'font-bold text-[#C4942A]' : 'text-[#5A6B7F]'}`}>{dayNum}</span>
+            {hasInterview && (
+              <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-[#C4942A] mx-auto" />
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

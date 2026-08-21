@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useMemo, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Upload,
@@ -12,10 +12,10 @@ import {
   Trash2,
   Eye,
   Filter,
-  Plus,
   X,
+  Loader2,
 } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -26,33 +26,61 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { createClient } from '@/lib/supabase/client'
+import { useAppStore } from '@/store/app-store'
+import { toast } from 'sonner'
 
-interface Document {
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+
+interface DocumentRow {
   id: string
   name: string
-  type: string
-  category: string
-  size: string
-  uploaded: string
-  uploadedBy: string
+  file_type: string | null
+  category: string | null
+  file_size: number | null
+  file_path: string | null
+  created_at: string
 }
 
-const documents: Document[] = [
-  { id: 'D-001', name: 'Barts_Health_Brochure_2026.pdf', type: 'PDF', category: 'Marketing', size: '2.4 MB', uploaded: '10 Aug 2026', uploadedBy: 'Claire Whitfield' },
-  { id: 'D-002', name: 'NHS_Standard_Contract_Template.docx', type: 'DOCX', category: 'Contracts', size: '156 KB', uploaded: '05 Aug 2026', uploadedBy: 'Claire Whitfield' },
-  { id: 'D-003', name: 'Trust_Governance_Framework.pdf', type: 'PDF', category: 'Policy', size: '1.1 MB', uploaded: '28 Jul 2026', uploadedBy: 'HR Team' },
-  { id: 'D-004', name: 'International_Recruitment_Onboarding_Guide.pdf', type: 'PDF', category: 'Policy', size: '3.8 MB', uploaded: '15 Jul 2026', uploadedBy: 'Claire Whitfield' },
-]
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
 
-const typeIcon = (type: string) => {
+const typeIcon = (type: string | null) => {
   switch (type) {
-    case 'PDF': return <FileText className="w-5 h-5 text-red-500" />
-    case 'DOCX': return <FileCheck className="w-5 h-5 text-blue-500" />
-    case 'XLSX': return <FileSpreadsheet className="w-5 h-5 text-emerald-500" />
-    case 'PNG': case 'JPG': return <FileImage className="w-5 h-5 text-purple-500" />
+    case 'pdf': return <FileText className="w-5 h-5 text-red-500" />
+    case 'docx': case 'doc': return <FileCheck className="w-5 h-5 text-blue-500" />
+    case 'xlsx': case 'xls': return <FileSpreadsheet className="w-5 h-5 text-emerald-500" />
+    case 'png': case 'jpg': case 'jpeg': return <FileImage className="w-5 h-5 text-purple-500" />
     default: return <FileText className="w-5 h-5 text-[#5A6B7F]" />
   }
 }
+
+const typeLabel = (type: string | null): string => {
+  if (!type) return 'FILE'
+  return type.toUpperCase()
+}
+
+function formatFileSize(bytes: number | null): string {
+  if (!bytes) return '—'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+/* ------------------------------------------------------------------ */
+/*  Loading skeleton                                                   */
+/* ------------------------------------------------------------------ */
 
 function PageSkeleton() {
   return (
@@ -64,21 +92,86 @@ function PageSkeleton() {
   )
 }
 
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
+
 export default function EmployerDocuments() {
+  const supabase = useMemo(() => createClient(), [])
+  const user = useAppStore((s) => s.user)
+
+  const [documents, setDocuments] = useState<DocumentRow[]>([])
   const [loading, setLoading] = useState(true)
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [isDragging, setIsDragging] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 500)
-    return () => clearTimeout(t)
-  }, [])
+  const hasFetched = useRef(false)
 
-  const categories = Array.from(new Set(documents.map(d => d.category)))
+  async function fetchDocuments() {
+    if (!user?.id) return
+    try {
+      const { data, error } = await supabase
+        .from('documents')
+        .select('id, name, file_type, category, file_size, file_path, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      setDocuments((data || []) as DocumentRow[])
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to load documents')
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  const filtered = documents.filter(d =>
-    categoryFilter === 'all' || d.category === categoryFilter
-  )
+  if (!hasFetched.current && user?.id) {
+    hasFetched.current = true
+    fetchDocuments()
+  }
+
+  /* ---- handlers ---- */
+
+  const handleUpload = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0 || !user?.id) return
+    setUploading(true)
+    try {
+      for (const file of Array.from(files)) {
+        const ext = file.name.split('.').pop()?.toLowerCase() || ''
+        const { error } = await supabase.from('documents').insert({
+          user_id: user.id,
+          name: file.name,
+          file_type: ext,
+          category: 'General',
+          file_size: file.size,
+        })
+        if (error) throw error
+      }
+      toast.success(`${files.length} document${files.length !== 1 ? 's' : ''} uploaded`)
+      fetchDocuments()
+    } catch {
+      toast.error('Failed to upload documents')
+    } finally {
+      setUploading(false)
+    }
+  }, [supabase, user?.id])
+
+  const handleDelete = useCallback(async (docId: string) => {
+    setDeleting(docId)
+    try {
+      const { error } = await supabase.from('documents').delete().eq('id', docId)
+      if (error) throw error
+      setDocuments((prev) => prev.filter((d) => d.id !== docId))
+      toast.success('Document deleted')
+    } catch {
+      toast.error('Failed to delete document')
+    } finally {
+      setDeleting(null)
+    }
+  }, [supabase])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -92,9 +185,39 @@ export default function EmployerDocuments() {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
-  }, [])
+    handleUpload(e.dataTransfer.files)
+  }, [handleUpload])
+
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    handleUpload(e.target.files)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }, [handleUpload])
+
+  /* ---- derived ---- */
+
+  const categories = useMemo(
+    () => Array.from(new Set(documents.map((d) => d.category || 'Uncategorised').filter(Boolean))),
+    [documents]
+  )
+
+  const filtered = useMemo(
+    () => documents.filter((d) => categoryFilter === 'all' || (d.category || 'Uncategorised') === categoryFilter),
+    [documents, categoryFilter]
+  )
+
+  /* ---- early returns ---- */
 
   if (loading) return <PageSkeleton />
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <p className="text-[#5A6B7F]">Please log in to view documents.</p>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
@@ -114,18 +237,30 @@ export default function EmployerDocuments() {
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
           className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${
             isDragging
               ? 'border-[#C4942A] bg-[#C4942A]/5'
               : 'border-[#D1D9E6] bg-[#F7F9FC] hover:bg-[#F0F4F8]'
           }`}
         >
-          <Upload className={`w-10 h-10 mx-auto mb-3 ${isDragging ? 'text-[#C4942A]' : 'text-[#5A6B7F]'}`} />
+          {uploading ? (
+            <Loader2 className="w-10 h-10 mx-auto mb-3 text-[#C4942A] animate-spin" />
+          ) : (
+            <Upload className={`w-10 h-10 mx-auto mb-3 ${isDragging ? 'text-[#C4942A]' : 'text-[#5A6B7F]'}`} />
+          )}
           <p className="text-sm font-medium text-[#0B1D33]">
-            {isDragging ? 'Drop files here' : 'Drag and drop files here, or click to browse'}
+            {uploading ? 'Uploading…' : isDragging ? 'Drop files here' : 'Drag and drop files here, or click to browse'}
           </p>
           <p className="text-xs text-[#5A6B7F] mt-1">PDF, DOCX, XLSX, PNG, JPG up to 25 MB</p>
-          <input type="file" className="hidden" multiple accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg" />
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            multiple
+            accept=".pdf,.docx,.doc,.xlsx,.xls,.png,.jpg,.jpeg"
+            onChange={handleFileInput}
+          />
         </div>
       </motion.div>
 
@@ -144,7 +279,9 @@ export default function EmployerDocuments() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
-              {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              {categories.map((c) => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -165,25 +302,37 @@ export default function EmployerDocuments() {
               <Card className="border-[#D1D9E6] hover:shadow-sm transition-shadow">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-3">
-                    {typeIcon(doc.type)}
+                    {typeIcon(doc.file_type)}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-[#0B1D33] truncate">{doc.name}</p>
                       <div className="flex flex-wrap items-center gap-2 mt-0.5 text-xs text-[#5A6B7F]">
-                        <Badge variant="secondary" className="bg-[#F0F4F8] text-[#1A3A5C] text-[10px]">{doc.category}</Badge>
-                        <span>{doc.size}</span>
+                        <Badge variant="secondary" className="bg-[#F0F4F8] text-[#1A3A5C] text-[10px]">{doc.category || 'General'}</Badge>
+                        <Badge variant="secondary" className="bg-gray-100 text-gray-500 text-[10px]">{typeLabel(doc.file_type)}</Badge>
+                        <span>{formatFileSize(doc.file_size)}</span>
                         <span>·</span>
-                        <span>Uploaded {doc.uploaded} by {doc.uploadedBy}</span>
+                        <span>Uploaded {formatDate(doc.created_at)}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <Button variant="ghost" size="icon" className="text-[#5A6B7F] hover:text-[#1A3A5C] h-8 w-8">
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="text-[#5A6B7F] hover:text-[#1A3A5C] h-8 w-8">
-                        <Download className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="text-[#5A6B7F] hover:text-red-500 h-8 w-8">
-                        <Trash2 className="w-4 h-4" />
+                      {doc.file_path && (
+                        <a href={doc.file_path} target="_blank" rel="noopener noreferrer">
+                          <Button variant="ghost" size="icon" className="text-[#5A6B7F] hover:text-[#1A3A5C] h-8 w-8">
+                            <Download className="w-4 h-4" />
+                          </Button>
+                        </a>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-[#5A6B7F] hover:text-red-500 h-8 w-8"
+                        disabled={deleting === doc.id}
+                        onClick={() => handleDelete(doc.id)}
+                      >
+                        {deleting === doc.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
                       </Button>
                     </div>
                   </div>

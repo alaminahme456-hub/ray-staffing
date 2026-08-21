@@ -1,242 +1,392 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { motion } from 'framer-motion'
 import {
   BarChart3,
-  Clock,
-  PoundSterling,
-  Target,
   Users,
-  Download,
-  CalendarDays,
   TrendingUp,
+  Briefcase,
+  FileText,
+  UserCheck,
+  Clock,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { createClient } from '@/lib/supabase/client'
+import { useAppStore } from '@/store/app-store'
+import { toast } from 'sonner'
 
-const reportTypes = [
-  { id: 'recruitment', title: 'Recruitment Summary', description: 'Overview of vacancies, applications, and placements across a selected period.', icon: BarChart3, color: 'bg-[#1A3A5C]/10 text-[#1A3A5C]' },
-  { id: 'timetohire', title: 'Time to Hire', description: 'Average days from vacancy creation to candidate placement by department and role.', icon: Clock, color: 'bg-purple-50 text-purple-600' },
-  { id: 'costperhire', title: 'Cost per Hire', description: 'Breakdown of recruitment costs including advertising, agency fees, and onboarding.', icon: PoundSterling, color: 'bg-emerald-50 text-emerald-600' },
-  { id: 'source', title: 'Source Analysis', description: 'Effectiveness of different candidate sourcing channels and platforms.', icon: Target, color: 'bg-[#C4942A]/10 text-[#C4942A]' },
-  { id: 'diversity', title: 'Diversity Report', description: 'Workforce diversity metrics including gender, ethnicity, and disability data.', icon: Users, color: 'bg-orange-50 text-orange-600' },
-]
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 
-const monthlyData = [
-  { month: 'Mar 2026', vacancies: 8, applications: 72, interviews: 14, offers: 5, placements: 3 },
-  { month: 'Apr 2026', vacancies: 10, applications: 95, interviews: 19, offers: 7, placements: 5 },
-  { month: 'May 2026', vacancies: 9, applications: 88, interviews: 16, offers: 6, placements: 4 },
-  { month: 'Jun 2026', vacancies: 12, applications: 110, interviews: 22, offers: 8, placements: 6 },
-  { month: 'Jul 2026', vacancies: 11, applications: 102, interviews: 20, offers: 7, placements: 5 },
-  { month: 'Aug 2026', vacancies: 12, applications: 147, interviews: 24, offers: 9, placements: 6 },
-]
+interface StatusCount {
+  status: string
+  count: number
+}
+
+interface ReportData {
+  totalJobs: number
+  totalApplications: number
+  totalPlaced: number
+  activeJobs: number
+  statusBreakdown: StatusCount[]
+  applicationsByMonth: { month: string; count: number }[]
+}
+
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+
+const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  pending:     { label: 'Pending',     color: 'bg-amber-100 text-amber-700' },
+  shortlisted: { label: 'Shortlisted', color: 'bg-emerald-100 text-emerald-700' },
+  interviewing:{ label: 'Interviewing',color: 'bg-purple-100 text-purple-700' },
+  offered:     { label: 'Offered',     color: 'bg-cyan-100 text-cyan-700' },
+  rejected:    { label: 'Rejected',    color: 'bg-red-100 text-red-700' },
+  withdrawn:   { label: 'Withdrawn',   color: 'bg-gray-100 text-gray-600' },
+  placed:      { label: 'Placed',      color: 'bg-green-100 text-green-700' },
+}
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+function formatMonth(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', {
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+/* ------------------------------------------------------------------ */
+/*  Loading skeleton                                                   */
+/* ------------------------------------------------------------------ */
 
 function PageSkeleton() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
       <Skeleton className="h-8 w-48" />
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}</div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}</div>
+      <Skeleton className="h-64 rounded-xl" />
+      <Skeleton className="h-64 rounded-xl" />
     </div>
   )
 }
 
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
+
 export default function EmployerReports() {
+  const supabase = useMemo(() => createClient(), [])
+  const user = useAppStore((s) => s.user)
+
   const [loading, setLoading] = useState(true)
-  const [showPreview, setShowPreview] = useState(false)
-  const [dateRange, setDateRange] = useState('6m')
-  const [selectedReport, setSelectedReport] = useState(reportTypes[0])
+  const [report, setReport] = useState<ReportData>({
+    totalJobs: 0,
+    totalApplications: 0,
+    totalPlaced: 0,
+    activeJobs: 0,
+    statusBreakdown: [],
+    applicationsByMonth: [],
+  })
 
-  useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 500)
-    return () => clearTimeout(t)
-  }, [])
+  const hasFetched = useRef(false)
 
-  const maxValues = {
-    applications: Math.max(...monthlyData.map(d => d.applications)),
-    interviews: Math.max(...monthlyData.map(d => d.interviews)),
-    offers: Math.max(...monthlyData.map(d => d.offers)),
-    placements: Math.max(...monthlyData.map(d => d.placements)),
+  async function fetchReport() {
+    if (!user?.id) return
+    try {
+      /* Get all jobs for this employer */
+      const { data: jobs, error: jobsErr } = await supabase
+        .from('jobs')
+        .select('id, status')
+        .eq('employer_id', user.id)
+      if (jobsErr) throw jobsErr
+
+      const allJobs = jobs || []
+      const jobIds = allJobs.map((j) => j.id)
+
+      /* Get all applications for these jobs */
+      let applications: { status: string; created_at: string }[] = []
+      if (jobIds.length > 0) {
+        const { data: apps, error: appErr } = await supabase
+          .from('applications')
+          .select('status, created_at')
+          .in('job_id', jobIds)
+        if (appErr) throw appErr
+        applications = (apps || []) as { status: string; created_at: string }[]
+      }
+
+      /* Status breakdown */
+      const statusMap = new Map<string, number>()
+      for (const app of applications) {
+        statusMap.set(app.status, (statusMap.get(app.status) || 0) + 1)
+      }
+      const statusBreakdown: StatusCount[] = Array.from(statusMap.entries()).map(
+        ([status, count]) => ({ status, count })
+      )
+
+      /* Applications by month (last 6 months) */
+      const now = new Date()
+      const monthKeys: string[] = []
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        monthKeys.push(
+          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+        )
+      }
+
+      const monthCounts = new Map<string, number>()
+      for (const app of applications) {
+        const m = app.created_at.slice(0, 7) /* YYYY-MM */
+        if (monthKeys.includes(m)) {
+          monthCounts.set(m, (monthCounts.get(m) || 0) + 1)
+        }
+      }
+
+      const applicationsByMonth = monthKeys.map((mk) => {
+        const d = new Date(parseInt(mk), parseInt(mk.split('-')[1]) - 1, 1)
+        return {
+          month: formatMonth(d.toISOString()),
+          count: monthCounts.get(mk) || 0,
+        }
+      })
+
+      setReport({
+        totalJobs: allJobs.length,
+        totalApplications: applications.length,
+        totalPlaced: statusMap.get('placed') || 0,
+        activeJobs: allJobs.filter((j) => j.status === 'active').length,
+        statusBreakdown,
+        applicationsByMonth,
+      })
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to load reports')
+    } finally {
+      setLoading(false)
+    }
   }
 
+  if (!hasFetched.current && user?.id) {
+    hasFetched.current = true
+    fetchReport()
+  }
+
+  /* ---- derived ---- */
+
+  const maxAppCount = Math.max(
+    1,
+    ...report.applicationsByMonth.map((m) => m.count)
+  )
+
+  const maxStatusCount = Math.max(
+    1,
+    ...report.statusBreakdown.map((s) => s.count)
+  )
+
+  /* ---- early returns ---- */
+
   if (loading) return <PageSkeleton />
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <p className="text-[#5A6B7F]">Please log in to view reports.</p>
+      </div>
+    )
+  }
+
+  /* ---- render ---- */
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-2xl sm:text-3xl font-bold text-[#0B1D33]">Reports</h1>
-        <p className="text-[#5A6B7F] mt-0.5">Generate and download recruitment analytics</p>
+        <p className="text-[#5A6B7F] mt-0.5">Recruitment analytics and statistics</p>
       </motion.div>
 
-      {/* Report Type Cards */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {reportTypes.map((r, i) => (
-          <motion.div
-            key={r.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.08 + i * 0.05 }}
-          >
-            <Card className="border-[#D1D9E6] hover:shadow-md transition-shadow h-full">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${r.color}`}>
-                    <r.icon className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-[#0B1D33] text-sm">{r.title}</h3>
-                    <p className="text-xs text-[#5A6B7F] mt-1 leading-relaxed">{r.description}</p>
-                    <div className="flex items-center gap-2 mt-3">
-                      <Select value={dateRange} onValueChange={setDateRange}>
-                        <SelectTrigger className="w-28 h-7 text-[10px] border-[#D1D9E6]">
-                          <CalendarDays className="w-3 h-3 mr-1" />
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="1m">Last Month</SelectItem>
-                          <SelectItem value="3m">Last 3 Months</SelectItem>
-                          <SelectItem value="6m">Last 6 Months</SelectItem>
-                          <SelectItem value="12m">Last 12 Months</SelectItem>
-                          <SelectItem value="ytd">Year to Date</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        size="sm"
-                        className="bg-[#C4942A] hover:bg-[#B3861F] text-white text-xs h-7"
-                        onClick={() => { setSelectedReport(r); setShowPreview(true) }}
-                      >
-                        Generate
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+      {/* Summary Stats */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.08 }}
+        className="grid grid-cols-2 sm:grid-cols-4 gap-4"
+      >
+        {[
+          { label: 'Total Vacancies', value: report.totalJobs, icon: Briefcase, color: 'text-[#1A3A5C] bg-[#1A3A5C]/10' },
+          { label: 'Active Vacancies', value: report.activeJobs, icon: TrendingUp, color: 'text-emerald-600 bg-emerald-50' },
+          { label: 'Total Applications', value: report.totalApplications, icon: FileText, color: 'text-[#C4942A] bg-[#C4942A]/10' },
+          { label: 'Placements', value: report.totalPlaced, icon: UserCheck, color: 'text-purple-600 bg-purple-50' },
+        ].map((s) => (
+          <Card key={s.label} className="border-[#D1D9E6]">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${s.color}`}>
+                <s.icon className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-[#0B1D33]">{s.value}</p>
+                <p className="text-xs text-[#5A6B7F]">{s.label}</p>
+              </div>
+            </CardContent>
+          </Card>
         ))}
-      </div>
+      </motion.div>
 
-      {/* Recruitment Summary Preview Dialog */}
-      <Dialog open={showPreview} onOpenChange={setShowPreview}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto border-[#D1D9E6]">
-          <DialogHeader>
-            <div className="flex items-center justify-between">
-              <DialogTitle className="text-[#0B1D33] flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-[#C4942A]" /> {selectedReport.title}
-              </DialogTitle>
-              <Button variant="outline" size="sm" className="border-[#D1D9E6] text-[#1A3A5C]">
-                <Download className="w-3.5 h-3.5 mr-1.5" /> Export PDF
-              </Button>
-            </div>
-          </DialogHeader>
-
-          <div className="space-y-6 pt-2">
-            {/* Summary Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[
-                { label: 'Total Vacancies', value: '62', change: '+18%' },
-                { label: 'Total Applications', value: '614', change: '+32%' },
-                { label: 'Interviews', value: '115', change: '+24%' },
-                { label: 'Placements', value: '29', change: '+20%' },
-              ].map((s) => (
-                <div key={s.label} className="bg-[#F7F9FC] rounded-lg p-3 text-center">
-                  <p className="text-xl font-bold text-[#0B1D33]">{s.value}</p>
-                  <p className="text-[10px] text-[#5A6B7F]">{s.label}</p>
-                  <Badge variant="secondary" className="mt-1 text-[9px] bg-emerald-50 text-emerald-600">
-                    <TrendingUp className="w-2.5 h-2.5 mr-0.5" />{s.change}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-
-            {/* Bar Chart - CSS based */}
-            <div>
-              <h3 className="text-sm font-semibold text-[#0B1D33] mb-3">Monthly Breakdown</h3>
+      {/* Applications Over Time Chart */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+      >
+        <Card className="border-[#D1D9E6]">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold text-[#0B1D33] flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-[#C4942A]" /> Applications Over Time
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {report.applicationsByMonth.length > 0 ? (
               <div className="space-y-3">
-                {monthlyData.map((row) => (
+                {report.applicationsByMonth.map((row) => (
                   <div key={row.month} className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-[#5A6B7F] w-20 shrink-0">{row.month}</span>
-                      <div className="flex-1 mx-3 flex items-center gap-1">
-                        {[['applications', '#1A3A5C'], ['interviews', '#C4942A'], ['offers', '#8B5CF6'], ['placements', '#10B981']].map(([key, color]) => {
-                          const val = row[key as keyof typeof row] as number
-                          const max = maxValues[key as keyof typeof maxValues] as number
-                          return (
-                            <div
-                              key={key as string}
-                              className="h-5 rounded-sm transition-all duration-500"
-                              style={{
-                                width: `${(val / max) * 100}%`,
-                                backgroundColor: color,
-                                minWidth: val > 0 ? '4px' : '0',
-                                opacity: 0.85,
-                              }}
-                              title={`${key}: ${val}`}
-                            />
-                          )
-                        })}
+                      <div className="flex-1 mx-3">
+                        <div
+                          className="h-6 rounded-sm bg-[#1A3A5C] transition-all duration-500"
+                          style={{
+                            width: `${(row.count / maxAppCount) * 100}%`,
+                            minWidth: row.count > 0 ? '24px' : '0',
+                            opacity: 0.85,
+                          }}
+                        >
+                          {row.count > 0 && (
+                            <span className="text-white text-[10px] font-medium px-2 leading-6">{row.count}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
-              {/* Legend */}
-              <div className="flex flex-wrap gap-4 mt-3">
-                {[['Applications', '#1A3A5C'], ['Interviews', '#C4942A'], ['Offers', '#8B5CF6'], ['Placements', '#10B981']].map(([label, color]) => (
-                  <div key={label as string} className="flex items-center gap-1.5 text-xs text-[#5A6B7F]">
-                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
-                    {label as string}
-                  </div>
-                ))}
+            ) : (
+              <div className="text-center py-8 text-[#5A6B7F]">
+                <p className="text-sm">No application data yet</p>
               </div>
-            </div>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
 
-            {/* Data Table */}
+      {/* Applications by Status */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.22 }}
+      >
+        <Card className="border-[#D1D9E6]">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold text-[#0B1D33] flex items-center gap-2">
+              <Users className="w-4 h-4 text-[#C4942A]" /> Applications by Status
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {report.statusBreakdown.length > 0 ? (
+              <div className="space-y-3">
+                {report.statusBreakdown
+                  .sort((a, b) => b.count - a.count)
+                  .map((row) => {
+                    const cfg = STATUS_CONFIG[row.status] || { label: row.status, color: 'bg-gray-100 text-gray-600' }
+                    return (
+                      <div key={row.status} className="flex items-center gap-3">
+                        <Badge variant="secondary" className={`text-[10px] font-medium shrink-0 w-24 justify-center ${cfg.color}`}>
+                          {cfg.label}
+                        </Badge>
+                        <div className="flex-1">
+                          <div
+                            className="h-6 rounded-sm bg-[#C4942A] transition-all duration-500"
+                            style={{
+                              width: `${(row.count / maxStatusCount) * 100}%`,
+                              minWidth: row.count > 0 ? '32px' : '0',
+                              opacity: 0.85,
+                            }}
+                          >
+                            {row.count > 0 && (
+                              <span className="text-white text-[10px] font-medium px-2 leading-6">{row.count}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-[#5A6B7F]">
+                <p className="text-sm">No applications recorded yet</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Status Breakdown Table */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+      >
+        <Card className="border-[#D1D9E6]">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold text-[#0B1D33] flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[#C4942A]" /> Summary Table
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[#D1D9E6] bg-[#F7F9FC]">
-                    <th className="text-left py-2.5 px-3 font-medium text-[#5A6B7F]">Month</th>
-                    <th className="text-right py-2.5 px-3 font-medium text-[#5A6B7F]">Vacancies</th>
-                    <th className="text-right py-2.5 px-3 font-medium text-[#5A6B7F]">Applications</th>
-                    <th className="text-right py-2.5 px-3 font-medium text-[#5A6B7F]">Interviews</th>
-                    <th className="text-right py-2.5 px-3 font-medium text-[#5A6B7F]">Offers</th>
-                    <th className="text-right py-2.5 px-3 font-medium text-[#5A6B7F]">Placements</th>
+                    <th className="text-left py-2.5 px-4 font-medium text-[#5A6B7F]">Status</th>
+                    <th className="text-right py-2.5 px-4 font-medium text-[#5A6B7F]">Count</th>
+                    <th className="text-right py-2.5 px-4 font-medium text-[#5A6B7F]">Percentage</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {monthlyData.map((row) => (
-                    <tr key={row.month} className="border-b border-[#D1D9E6] last:border-0 hover:bg-[#F7F9FC]">
-                      <td className="py-2.5 px-3 font-medium text-[#0B1D33]">{row.month}</td>
-                      <td className="py-2.5 px-3 text-right text-[#5A6B7F]">{row.vacancies}</td>
-                      <td className="py-2.5 px-3 text-right text-[#5A6B7F]">{row.applications}</td>
-                      <td className="py-2.5 px-3 text-right text-[#5A6B7F]">{row.interviews}</td>
-                      <td className="py-2.5 px-3 text-right text-[#5A6B7F]">{row.offers}</td>
-                      <td className="py-2.5 px-3 text-right text-[#5A6B7F]">{row.placements}</td>
+                  {report.statusBreakdown
+                    .sort((a, b) => b.count - a.count)
+                    .map((row) => {
+                      const cfg = STATUS_CONFIG[row.status] || { label: row.status, color: 'bg-gray-100 text-gray-600' }
+                      const pct = report.totalApplications > 0
+                        ? ((row.count / report.totalApplications) * 100).toFixed(1)
+                        : '0.0'
+                      return (
+                        <tr key={row.status} className="border-b border-[#D1D9E6] last:border-0 hover:bg-[#F7F9FC]">
+                          <td className="py-2.5 px-4">
+                            <Badge variant="secondary" className={`text-[10px] font-medium ${cfg.color}`}>
+                              {cfg.label}
+                            </Badge>
+                          </td>
+                          <td className="py-2.5 px-4 text-right text-[#0B1D33] font-medium">{row.count}</td>
+                          <td className="py-2.5 px-4 text-right text-[#5A6B7F]">{pct}%</td>
+                        </tr>
+                      )
+                    })}
+                  {report.statusBreakdown.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="py-8 text-center text-[#5A6B7F]">No data available</td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </CardContent>
+        </Card>
+      </motion.div>
     </div>
   )
 }

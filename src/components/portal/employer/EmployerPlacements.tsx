@@ -1,17 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { motion } from 'framer-motion'
 import {
   UserCheck,
-  Briefcase,
-  Building2,
   Calendar,
-  Phone,
-  Mail,
-  Clock,
   Eye,
-  FileText,
+  Briefcase,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -24,54 +19,42 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { createClient } from '@/lib/supabase/client'
+import { useAppStore } from '@/store/app-store'
+import { toast } from 'sonner'
 
-interface Placement {
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+
+interface PlacementRow {
   id: string
-  candidate: string
-  jobTitle: string
-  department: string
-  startDate: string
-  status: 'Active' | 'Probation' | 'Confirmed'
-  email: string
-  phone: string
-  lineManager: string
-  contractType: string
-  salary: string
-  notes: string
+  candidate_name: string
+  candidate_email: string | null
+  candidate_phone: string | null
+  candidate_role: string | null
+  job_title: string
+  placed_at: string
+  updated_at: string
+  application_id: string
+  cover_letter: string | null
 }
 
-const placements: Placement[] = [
-  {
-    id: 'P-001', candidate: 'Dr Fiona Mbeki', jobTitle: 'Consultant Cardiologist', department: 'Cardiology',
-    startDate: '01 Jun 2026', status: 'Probation', email: 'f.mbeki@bartshealth.nhs.uk', phone: '07700 123 456',
-    lineManager: 'Dr Richard Hale', contractType: 'Permanent, Full-time', salary: 'Band 9 (£105,000 – £120,000)',
-    notes: 'Currently in 6-month probationary period. Positive feedback from ward staff. RCPLD programme on track.',
-  },
-  {
-    id: 'P-002', candidate: 'Maria Santos', jobTitle: 'Staff Nurse – A&E', department: 'Emergency Medicine',
-    startDate: '15 Mar 2026', status: 'Active', email: 'm.santos@bartshealth.nhs.uk', phone: '07700 234 567',
-    lineManager: 'Sister Janet Okonkwo', contractType: 'Permanent, Full-time', salary: 'Band 5 (£28,407 – £34,581)',
-    notes: 'Relocated from Portugal under international recruitment programme. Settling in well. Completed orientation.',
-  },
-  {
-    id: 'P-003', candidate: 'Thomas Adebayo', jobTitle: 'Biomedical Scientist', department: 'Pathology',
-    startDate: '10 Jan 2026', status: 'Confirmed', email: 't.adebayo@bartshealth.nhs.uk', phone: '07700 345 678',
-    lineManager: 'Dr Anne Coles', contractType: 'Permanent, Full-time', salary: 'Band 6 (£35,392 – £42,618)',
-    notes: 'Successfully completed probation. HCPC registration renewed. Training on new analysers complete.',
-  },
-  {
-    id: 'P-004', candidate: 'Lena Johansson', jobTitle: 'Midwife', department: 'Maternity',
-    startDate: '20 Apr 2026', status: 'Active', email: 'l.johansson@bartshealth.nhs.uk', phone: '07700 456 789',
-    lineManager: 'Midwife Sarah Clarke', contractType: 'Permanent, Full-time', salary: 'Band 6 (£35,392 – £42,618)',
-    notes: 'Joined from Sweden via EEA recognition pathway. Currently undertaking supervised practice period.',
-  },
-]
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
 
-const statusColors: Record<string, string> = {
-  Active: 'bg-emerald-100 text-emerald-700',
-  Probation: 'bg-amber-100 text-amber-700',
-  Confirmed: 'bg-blue-100 text-blue-700',
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
 }
+
+/* ------------------------------------------------------------------ */
+/*  Loading skeleton                                                   */
+/* ------------------------------------------------------------------ */
 
 function PageSkeleton() {
   return (
@@ -83,22 +66,115 @@ function PageSkeleton() {
   )
 }
 
-export default function EmployerPlacements() {
-  const [loading, setLoading] = useState(true)
-  const [selectedPlacement, setSelectedPlacement] = useState<Placement | null>(null)
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
 
-  useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 500)
-    return () => clearTimeout(t)
-  }, [])
+export default function EmployerPlacements() {
+  const supabase = useMemo(() => createClient(), [])
+  const user = useAppStore((s) => s.user)
+
+  const [placements, setPlacements] = useState<PlacementRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedPlacement, setSelectedPlacement] = useState<PlacementRow | null>(null)
+
+  const hasFetched = useRef(false)
+
+  async function fetchPlacements() {
+    if (!user?.id) return
+    try {
+      /* Get all jobs for this employer */
+      const { data: jobs, error: jobsErr } = await supabase
+        .from('jobs')
+        .select('id, title')
+        .eq('employer_id', user.id)
+      if (jobsErr) throw jobsErr
+
+      if (!jobs || jobs.length === 0) {
+        setPlacements([])
+        return
+      }
+
+      const jobMap = new Map(jobs.map((j) => [j.id, j.title]))
+      const jobIds = jobs.map((j) => j.id)
+
+      /* Get applications with status 'placed' for these jobs */
+      const { data: applications, error: appErr } = await supabase
+        .from('applications')
+        .select('id, candidate_id, job_id, cover_letter, status, created_at, updated_at')
+        .in('job_id', jobIds)
+        .eq('status', 'placed')
+        .order('updated_at', { ascending: false })
+      if (appErr) throw appErr
+
+      if (!applications || applications.length === 0) {
+        setPlacements([])
+        return
+      }
+
+      /* Get candidate profiles */
+      const candidateIds = [...new Set(applications.map((a) => a.candidate_id))]
+      const { data: profiles, error: profErr } = await supabase
+        .from('profiles')
+        .select('id, name, email, phone, role')
+        .in('id', candidateIds)
+      if (profErr) throw profErr
+
+      const profileMap = new Map((profiles || []).map((p) => [p.id, p]))
+
+      const rows: PlacementRow[] = applications.map((a) => {
+        const prof = profileMap.get(a.candidate_id)
+        return {
+          id: a.id,
+          candidate_name: prof?.name || 'Unknown Candidate',
+          candidate_email: prof?.email || null,
+          candidate_phone: prof?.phone || null,
+          candidate_role: prof?.role || null,
+          job_title: jobMap.get(a.job_id) || 'Unknown Job',
+          placed_at: a.updated_at,
+          updated_at: a.updated_at,
+          application_id: a.id,
+          cover_letter: a.cover_letter,
+        }
+      })
+
+      setPlacements(rows)
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to load placements')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!hasFetched.current && user?.id) {
+    hasFetched.current = true
+    fetchPlacements()
+  }
+
+  /* ---- derived ---- */
 
   const summaryStats = [
-    { label: 'Active', value: placements.filter(p => p.status === 'Active').length, color: 'text-emerald-600 bg-emerald-50' },
-    { label: 'Probation', value: placements.filter(p => p.status === 'Probation').length, color: 'text-amber-600 bg-amber-50' },
-    { label: 'Confirmed', value: placements.filter(p => p.status === 'Confirmed').length, color: 'text-blue-600 bg-blue-50' },
+    { label: 'Total Placed', value: placements.length, color: 'text-emerald-600 bg-emerald-50' },
+    { label: 'This Month', value: placements.filter((p) => {
+      const d = new Date(p.placed_at)
+      const now = new Date()
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+    }).length, color: 'text-amber-600 bg-amber-50' },
+    { label: 'This Year', value: placements.filter((p) => new Date(p.placed_at).getFullYear() === new Date().getFullYear()).length, color: 'text-blue-600 bg-blue-50' },
   ]
 
+  /* ---- early returns ---- */
+
   if (loading) return <PageSkeleton />
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <p className="text-[#5A6B7F]">Please log in to view placements.</p>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
@@ -141,46 +217,56 @@ export default function EmployerPlacements() {
             <CardTitle className="text-base font-semibold text-[#0B1D33]">Active Placements</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-[#D1D9E6] bg-[#F7F9FC]">
-                    <th className="text-left py-2.5 px-4 font-medium text-[#5A6B7F]">Candidate</th>
-                    <th className="text-left py-2.5 px-4 font-medium text-[#5A6B7F] hidden md:table-cell">Job Title</th>
-                    <th className="text-left py-2.5 px-4 font-medium text-[#5A6B7F] hidden lg:table-cell">Department</th>
-                    <th className="text-left py-2.5 px-4 font-medium text-[#5A6B7F] hidden sm:table-cell">Start Date</th>
-                    <th className="text-left py-2.5 px-4 font-medium text-[#5A6B7F]">Status</th>
-                    <th className="text-right py-2.5 px-4 font-medium text-[#5A6B7F]">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {placements.map((p) => (
-                    <tr key={p.id} className="border-b border-[#D1D9E6] last:border-0 hover:bg-[#F7F9FC] transition-colors">
-                      <td className="py-3 px-4">
-                        <p className="font-medium text-[#0B1D33]">{p.candidate}</p>
-                        <p className="text-xs text-[#5A6B7F] md:hidden">{p.jobTitle}</p>
-                      </td>
-                      <td className="py-3 px-4 text-[#5A6B7F] hidden md:table-cell">{p.jobTitle}</td>
-                      <td className="py-3 px-4 text-[#5A6B7F] hidden lg:table-cell">{p.department}</td>
-                      <td className="py-3 px-4 text-[#5A6B7F] hidden sm:table-cell">{p.startDate}</td>
-                      <td className="py-3 px-4">
-                        <Badge variant="secondary" className={statusColors[p.status]}>{p.status}</Badge>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-[#1A3A5C] hover:text-[#C4942A]"
-                          onClick={() => setSelectedPlacement(p)}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                      </td>
+            {placements.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[#D1D9E6] bg-[#F7F9FC]">
+                      <th className="text-left py-2.5 px-4 font-medium text-[#5A6B7F]">Candidate</th>
+                      <th className="text-left py-2.5 px-4 font-medium text-[#5A6B7F] hidden md:table-cell">Job Title</th>
+                      <th className="text-left py-2.5 px-4 font-medium text-[#5A6B7F] hidden lg:table-cell">Role</th>
+                      <th className="text-left py-2.5 px-4 font-medium text-[#5A6B7F] hidden sm:table-cell">Placed</th>
+                      <th className="text-left py-2.5 px-4 font-medium text-[#5A6B7F]">Status</th>
+                      <th className="text-right py-2.5 px-4 font-medium text-[#5A6B7F]">Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {placements.map((p) => (
+                      <tr key={p.id} className="border-b border-[#D1D9E6] last:border-0 hover:bg-[#F7F9FC] transition-colors">
+                        <td className="py-3 px-4">
+                          <p className="font-medium text-[#0B1D33]">{p.candidate_name}</p>
+                          <p className="text-xs text-[#5A6B7F] md:hidden">{p.job_title}</p>
+                        </td>
+                        <td className="py-3 px-4 text-[#5A6B7F] hidden md:table-cell">{p.job_title}</td>
+                        <td className="py-3 px-4 text-[#5A6B7F] hidden lg:table-cell">{p.candidate_role || '—'}</td>
+                        <td className="py-3 px-4 text-[#5A6B7F] hidden sm:table-cell">{formatDate(p.placed_at)}</td>
+                        <td className="py-3 px-4">
+                          <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">Placed</Badge>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-[#1A3A5C] hover:text-[#C4942A]"
+                            onClick={() => setSelectedPlacement(p)}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-16">
+                <div className="mx-auto w-14 h-14 rounded-full bg-[#F7F9FC] border border-[#D1D9E6] flex items-center justify-center mb-4">
+                  <UserCheck className="w-6 h-6 text-[#5A6B7F]" />
+                </div>
+                <p className="text-lg font-semibold text-[#0B1D33]">No placements yet</p>
+                <p className="text-sm text-[#5A6B7F] mt-1">Placements will appear here when candidates are marked as placed</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </motion.div>
@@ -196,71 +282,41 @@ export default function EmployerPlacements() {
               <div className="space-y-5 pt-1">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg font-semibold text-[#0B1D33]">{selectedPlacement.candidate}</h3>
-                    <p className="text-sm text-[#5A6B7F]">{selectedPlacement.jobTitle}</p>
+                    <h3 className="text-lg font-semibold text-[#0B1D33]">{selectedPlacement.candidate_name}</h3>
+                    <p className="text-sm text-[#5A6B7F]">{selectedPlacement.job_title}</p>
                   </div>
-                  <Badge variant="secondary" className={statusColors[selectedPlacement.status]}>{selectedPlacement.status}</Badge>
+                  <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">Placed</Badge>
                 </div>
 
                 <Separator className="bg-[#D1D9E6]" />
 
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div className="flex items-start gap-2">
-                    <Building2 className="w-4 h-4 text-[#C4942A] mt-0.5 shrink-0" />
+                    <Briefcase className="w-4 h-4 text-[#C4942A] mt-0.5 shrink-0" />
                     <div>
-                      <p className="text-xs text-[#5A6B7F]">Department</p>
-                      <p className="font-medium text-[#0B1D33]">{selectedPlacement.department}</p>
+                      <p className="text-xs text-[#5A6B7F]">Role</p>
+                      <p className="font-medium text-[#0B1D33]">{selectedPlacement.candidate_role || '—'}</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-2">
                     <Calendar className="w-4 h-4 text-[#C4942A] mt-0.5 shrink-0" />
                     <div>
-                      <p className="text-xs text-[#5A6B7F]">Start Date</p>
-                      <p className="font-medium text-[#0B1D33]">{selectedPlacement.startDate}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Mail className="w-4 h-4 text-[#C4942A] mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-xs text-[#5A6B7F]">Email</p>
-                      <p className="font-medium text-[#0B1D33] break-all">{selectedPlacement.email}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Phone className="w-4 h-4 text-[#C4942A] mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-xs text-[#5A6B7F]">Phone</p>
-                      <p className="font-medium text-[#0B1D33]">{selectedPlacement.phone}</p>
+                      <p className="text-xs text-[#5A6B7F]">Placed On</p>
+                      <p className="font-medium text-[#0B1D33]">{formatDate(selectedPlacement.placed_at)}</p>
                     </div>
                   </div>
                 </div>
 
                 <Separator className="bg-[#D1D9E6]" />
 
-                <div className="space-y-3 text-sm">
-                  <h4 className="font-semibold text-[#0B1D33] flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-[#C4942A]" /> Contract Details
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="bg-[#F7F9FC] rounded-lg p-3">
-                      <p className="text-xs text-[#5A6B7F]">Contract Type</p>
-                      <p className="font-medium text-[#0B1D33]">{selectedPlacement.contractType}</p>
-                    </div>
-                    <div className="bg-[#F7F9FC] rounded-lg p-3">
-                      <p className="text-xs text-[#5A6B7F]">Salary</p>
-                      <p className="font-medium text-[#0B1D33]">{selectedPlacement.salary}</p>
+                {selectedPlacement.cover_letter && (
+                  <div className="space-y-2 text-sm">
+                    <h4 className="font-semibold text-[#0B1D33]">Cover Letter</h4>
+                    <div className="bg-[#F7F9FC] rounded-lg p-3 text-[#5A6B7F] leading-relaxed whitespace-pre-wrap max-h-40 overflow-y-auto">
+                      {selectedPlacement.cover_letter}
                     </div>
                   </div>
-                  <div className="bg-[#F7F9FC] rounded-lg p-3">
-                    <p className="text-xs text-[#5A6B7F]">Line Manager</p>
-                    <p className="font-medium text-[#0B1D33]">{selectedPlacement.lineManager}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-2 text-sm">
-                  <h4 className="font-semibold text-[#0B1D33]">Notes</h4>
-                  <p className="text-[#5A6B7F] leading-relaxed">{selectedPlacement.notes}</p>
-                </div>
+                )}
               </div>
             </>
           )}

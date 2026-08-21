@@ -24,6 +24,21 @@ export default function HomePage() {
     <main className="min-h-screen">
       {/* ═══════ HERO ═══════ */}
       <section className="relative overflow-hidden min-h-[92vh] flex items-center" style={{ background: 'linear-gradient(160deg, #050E07 0%, #0A1F0D 40%, #0F2B18 100%)' }}>
+        {/* ── Mobile: Full-screen video background ── */}
+        <video
+          autoPlay
+          muted
+          loop
+          playsInline
+          className="absolute inset-0 w-full h-full object-cover lg:hidden opacity-30"
+          aria-hidden="true"
+        >
+          <source src="/videos/hero-mobile.mp4" type="video/mp4" />
+        </video>
+
+        {/* ── Mobile: Dark gradient overlay for text readability ── */}
+        <div className="absolute inset-0 lg:hidden bg-gradient-to-b from-[#050E07]/70 via-[#0A1F0D]/50 to-[#FAF8F5]" />
+
         {/* Subtle gold radial glow */}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_40%,rgba(196,148,42,0.07),transparent_55%)]" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-0 w-full">
