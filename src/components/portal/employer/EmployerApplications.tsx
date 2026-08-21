@@ -1,24 +1,24 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { useState, useMemo, useRef, useCallback } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search,
   Calendar,
-  Star,
-  Eye,
-  UserCheck,
-  XCircle,
-  CalendarClock,
-  MoreHorizontal,
-  CheckSquare,
-  Filter,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  StickyNote,
+  Save,
+  User,
+  Briefcase,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -26,263 +26,630 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Checkbox } from '@/components/ui/checkbox'
+import { Separator } from '@/components/ui/separator'
+import { createClient } from '@/lib/supabase/client'
 import { useAppStore } from '@/store/app-store'
+import { toast } from 'sonner'
 
-interface Application {
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+
+type ApplicationStatus =
+  | 'pending'
+  | 'shortlisted'
+  | 'interviewing'
+  | 'offered'
+  | 'rejected'
+  | 'withdrawn'
+  | 'placed'
+
+interface ApplicationRow {
   id: string
-  candidate: string
-  job: string
-  applied: string
-  matchScore: number
-  status: string
-  jobId: string
+  job_id: string
+  candidate_id: string
+  cover_letter: string | null
+  status: ApplicationStatus
+  employer_notes: string | null
+  created_at: string
+  updated_at: string
+  candidate_name: string | null
+  job_title: string | null
 }
 
-const applications: Application[] = [
-  { id: 'A-001', candidate: 'Aisha Patel', job: 'Staff Nurse – ICU', applied: '18 Aug 2026', matchScore: 94, status: 'Applied', jobId: 'V-001' },
-  { id: 'A-002', candidate: 'James Okafor', job: 'Senior Physiotherapist', applied: '17 Aug 2026', matchScore: 87, status: 'Reviewing', jobId: 'V-002' },
-  { id: 'A-003', candidate: 'Emma Worthington', job: 'Radiographer', applied: '17 Aug 2026', matchScore: 91, status: 'Shortlisted', jobId: 'V-003' },
-  { id: 'A-004', candidate: 'Kwame Asante', job: 'Mental Health Nurse', applied: '16 Aug 2026', matchScore: 82, status: 'Interview', jobId: 'V-004' },
-  { id: 'A-005', candidate: 'Sophie Chambers', job: 'Occupational Therapist', applied: '16 Aug 2026', matchScore: 78, status: 'Applied', jobId: 'V-005' },
-  { id: 'A-006', candidate: 'Raj Mehta', job: 'Staff Nurse – ICU', applied: '15 Aug 2026', matchScore: 85, status: 'Reviewing', jobId: 'V-001' },
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+
+const ALL_STATUSES: ApplicationStatus[] = [
+  'pending',
+  'shortlisted',
+  'interviewing',
+  'offered',
+  'rejected',
+  'withdrawn',
+  'placed',
 ]
 
-const pipelineStages = ['Applied', 'Reviewing', 'Shortlisted', 'Interview', 'Decision']
-
-const statusColors: Record<string, string> = {
-  Applied: 'bg-blue-100 text-blue-700',
-  Reviewing: 'bg-amber-100 text-amber-700',
-  Shortlisted: 'bg-emerald-100 text-emerald-700',
-  Interview: 'bg-purple-100 text-purple-700',
-  Decision: 'bg-[#C4942A]/10 text-[#C4942A]',
-  Rejected: 'bg-red-100 text-red-700',
+const STATUS_CONFIG: Record<
+  ApplicationStatus,
+  { label: string; dot: string; bg: string }
+> = {
+  pending:     { label: 'Pending',     dot: 'bg-amber-500',    bg: 'bg-amber-100 text-amber-700 border-amber-200' },
+  shortlisted: { label: 'Shortlisted', dot: 'bg-emerald-500',  bg: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  interviewing:{ label: 'Interviewing',dot: 'bg-purple-500',   bg: 'bg-purple-100 text-purple-700 border-purple-200' },
+  offered:     { label: 'Offered',     dot: 'bg-cyan-500',     bg: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
+  rejected:    { label: 'Rejected',    dot: 'bg-red-500',      bg: 'bg-red-100 text-red-700 border-red-200' },
+  withdrawn:   { label: 'Withdrawn',   dot: 'bg-gray-400',     bg: 'bg-gray-100 text-gray-600 border-gray-200' },
+  placed:      { label: 'Placed',      dot: 'bg-green-600',    bg: 'bg-green-100 text-green-700 border-green-200' },
 }
 
-const matchBadgeColor = (s: number) => {
-  if (s >= 90) return 'bg-emerald-100 text-emerald-700'
-  if (s >= 80) return 'bg-[#C4942A]/10 text-[#C4942A]'
-  return 'bg-gray-100 text-[#5A6B7F]'
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
 }
+
+function truncate(str: string | null, max: number): string {
+  if (!str) return 'No cover letter provided'
+  return str.length > max ? str.slice(0, max) + '…' : str
+}
+
+/* ------------------------------------------------------------------ */
+/*  Loading skeleton                                                   */
+/* ------------------------------------------------------------------ */
 
 function PageSkeleton() {
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
-      <Skeleton className="h-8 w-48" />
-      <Skeleton className="h-10 w-full" />
-      <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
+      <div className="space-y-1">
+        <Skeleton className="h-8 w-52" />
+        <Skeleton className="h-4 w-80" />
+      </div>
+      <Skeleton className="h-10 w-full max-w-md" />
+      <div className="flex gap-2">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} className="h-9 w-24 rounded-lg" />
+        ))}
+      </div>
+      <div className="space-y-3">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-24 rounded-xl" />
+        ))}
+      </div>
     </div>
   )
 }
 
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
+
 export default function EmployerApplications() {
+  const supabase = useMemo(() => createClient(), [])
+  const user = useAppStore((s) => s.user)
+
+  /* ---- state ---- */
+  const [apps, setApps] = useState<ApplicationRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [jobFilter, setJobFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const navigate = useAppStore((s) => s.navigate)
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [notesDraft, setNotesDraft] = useState<Record<string, string>>({})
+  const [savingNotes, setSavingNotes] = useState<string | null>(null)
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
 
-  useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 500)
-    return () => clearTimeout(t)
-  }, [])
+  /* ---- one-time fetch (ref guard, no useEffect+setState) ---- */
+  const hasFetched = useRef(false)
 
-  const uniqueJobs = Array.from(new Set(applications.map(a => a.job)))
+  async function fetchApplications() {
+    if (!user?.id) return
+    try {
+      const { data: jobs, error: jobsErr } = await supabase
+        .from('jobs')
+        .select('id, title')
+        .eq('employer_id', user.id)
+      if (jobsErr) throw jobsErr
 
-  const filtered = applications.filter((a) => {
-    const matchSearch = a.candidate.toLowerCase().includes(search.toLowerCase()) ||
-      a.job.toLowerCase().includes(search.toLowerCase())
-    const matchJob = jobFilter === 'all' || a.job === jobFilter
-    const matchStatus = statusFilter === 'all' || a.status === statusFilter
-    return matchSearch && matchJob && matchStatus
-  })
+      if (!jobs || jobs.length === 0) {
+        setApps([])
+        return
+      }
 
-  const toggleAll = () => {
-    if (selected.size === filtered.length) {
-      setSelected(new Set())
-    } else {
-      setSelected(new Set(filtered.map(a => a.id)))
+      const jobMap = new Map(jobs.map((j) => [j.id, j.title]))
+      const jobIds = jobs.map((j) => j.id)
+
+      const { data: applications, error: appErr } = await supabase
+        .from('applications')
+        .select(
+          'id, job_id, candidate_id, cover_letter, status, employer_notes, created_at, updated_at'
+        )
+        .in('job_id', jobIds)
+        .order('created_at', { ascending: false })
+      if (appErr) throw appErr
+
+      if (!applications || applications.length === 0) {
+        setApps([])
+        return
+      }
+
+      const candidateIds = [
+        ...new Set(applications.map((a) => a.candidate_id)),
+      ]
+      const { data: profiles, error: profErr } = await supabase
+        .from('profiles')
+        .select('id, name')
+        .in('id', candidateIds)
+      if (profErr) throw profErr
+
+      const profileMap = new Map(
+        (profiles || []).map((p) => [p.id, p.name])
+      )
+
+      const rows: ApplicationRow[] = applications.map((a) => ({
+        ...a,
+        candidate_name: profileMap.get(a.candidate_id) || 'Unknown Candidate',
+        job_title: jobMap.get(a.job_id) || 'Unknown Job',
+      }))
+
+      setApps(rows)
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to load applications')
+    } finally {
+      setLoading(false)
     }
   }
 
-  const toggleOne = (id: string) => {
-    const next = new Set(selected)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    setSelected(next)
+  if (!hasFetched.current && user?.id) {
+    hasFetched.current = true
+    fetchApplications()
   }
 
-  const pipelineCounts = pipelineStages.reduce((acc, s) => {
-    acc[s] = applications.filter(a => a.status === s).length
-    return acc
-  }, {} as Record<string, number>)
+  /* ---- derived data ---- */
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: apps.length }
+    for (const s of ALL_STATUSES) {
+      counts[s] = apps.filter((a) => a.status === s).length
+    }
+    return counts
+  }, [apps])
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase()
+    return apps.filter((a) => {
+      const matchSearch =
+        q === '' ||
+        (a.candidate_name || '').toLowerCase().includes(q) ||
+        (a.job_title || '').toLowerCase().includes(q)
+      const matchStatus =
+        statusFilter === 'all' || a.status === statusFilter
+      return matchSearch && matchStatus
+    })
+  }, [apps, search, statusFilter])
+
+  /* ---- handlers ---- */
+
+  const toggleExpand = useCallback(
+    (appId: string) => {
+      setExpandedId((prev) => (prev === appId ? null : appId))
+      setNotesDraft((prev) => {
+        if (prev[appId] !== undefined) return prev
+        const app = apps.find((a) => a.id === appId)
+        return { ...prev, [appId]: app?.employer_notes || '' }
+      })
+    },
+    [apps]
+  )
+
+  const updateStatus = useCallback(
+    async (appId: string, newStatus: ApplicationStatus) => {
+      setUpdatingStatus(appId)
+      try {
+        const { error } = await supabase
+          .from('applications')
+          .update({
+            status: newStatus,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', appId)
+        if (error) throw error
+
+        setApps((prev) =>
+          prev.map((a) =>
+            a.id === appId ? { ...a, status: newStatus } : a
+          )
+        )
+        toast.success(`Status updated to ${STATUS_CONFIG[newStatus].label}`)
+      } catch {
+        toast.error('Failed to update status')
+      } finally {
+        setUpdatingStatus(null)
+      }
+    },
+    [supabase]
+  )
+
+  const saveNotes = useCallback(
+    async (appId: string) => {
+      setSavingNotes(appId)
+      try {
+        const notes = notesDraft[appId] || null
+        const { error } = await supabase
+          .from('applications')
+          .update({
+            employer_notes: notes,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', appId)
+        if (error) throw error
+
+        setApps((prev) =>
+          prev.map((a) =>
+            a.id === appId ? { ...a, employer_notes: notes } : a
+          )
+        )
+        toast.success('Notes saved successfully')
+      } catch {
+        toast.error('Failed to save notes')
+      } finally {
+        setSavingNotes(null)
+      }
+    },
+    [supabase, notesDraft]
+  )
+
+  /* ---- early returns ---- */
 
   if (loading) return <PageSkeleton />
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <p className="text-[#5A6B7F]">Please log in to view applications.</p>
+      </div>
+    )
+  }
+
+  /* ---- render ---- */
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
       {/* Header */}
-      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-2xl sm:text-3xl font-bold text-[#0B1D33]">Applications</h1>
-        <p className="text-[#5A6B7F] mt-0.5">Review and manage candidate applications across all vacancies</p>
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <h1 className="text-2xl sm:text-3xl font-bold text-[#0B1D33]">
+          Applications
+        </h1>
+        <p className="text-[#5A6B7F] mt-0.5">
+          Review and manage candidate applications across all your vacancies
+        </p>
       </motion.div>
 
-      {/* Pipeline Visual */}
+      {/* Status filter tabs */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.08 }}
-        className="flex gap-2 overflow-x-auto pb-2"
+        transition={{ delay: 0.06 }}
+        className="flex gap-2 overflow-x-auto pb-2 -mb-1"
       >
-        {pipelineStages.map((stage, i) => (
-          <div
-            key={stage}
-            className="flex items-center gap-2 shrink-0 cursor-pointer"
-            onClick={() => setStatusFilter(statusFilter === stage ? 'all' : stage)}
-          >
-            <div className={`px-3 py-2 rounded-lg border transition-colors ${
-              statusFilter === stage
-                ? 'border-[#C4942A] bg-[#C4942A]/10'
-                : 'border-[#D1D9E6] bg-white hover:bg-[#F7F9FC]'
-            }`}>
-              <p className="text-xs font-medium text-[#5A6B7F] whitespace-nowrap">{stage}</p>
-              <p className="text-lg font-bold text-[#0B1D33]">{pipelineCounts[stage] || 0}</p>
-            </div>
-            {i < pipelineStages.length - 1 && (
-              <div className="w-6 h-px bg-[#D1D9E6] shrink-0" />
-            )}
-          </div>
-        ))}
+        {(['all', ...ALL_STATUSES] as const).map((s) => {
+          const isActive = statusFilter === s
+          const label =
+            s === 'all' ? 'All' : STATUS_CONFIG[s as ApplicationStatus].label
+          const count = statusCounts[s] ?? 0
+          return (
+            <button
+              key={s}
+              onClick={() =>
+                setStatusFilter((prev) => (prev === s ? 'all' : s))
+              }
+              className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                isActive
+                  ? 'border-[#C4942A] bg-[#C4942A]/10 text-[#C4942A]'
+                  : 'border-[#D1D9E6] bg-white text-[#5A6B7F] hover:bg-[#F7F9FC]'
+              }`}
+            >
+              {label}
+              <span
+                className={`text-xs px-1.5 py-0.5 rounded-full ${
+                  isActive
+                    ? 'bg-[#C4942A]/20 text-[#C4942A]'
+                    : 'bg-[#F7F9FC] text-[#5A6B7F]'
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          )
+        })}
       </motion.div>
 
-      {/* Filters */}
+      {/* Search */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.12 }}
-        className="flex flex-col sm:flex-row gap-3"
+        transition={{ delay: 0.1 }}
+        className="relative max-w-md"
       >
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5A6B7F]" />
-          <Input
-            placeholder="Search applications..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 border-[#D1D9E6] focus-visible:ring-[#C4942A]/30"
-          />
-        </div>
-        <Select value={jobFilter} onValueChange={setJobFilter}>
-          <SelectTrigger className="w-full sm:w-52 border-[#D1D9E6]">
-            <SelectValue placeholder="Filter by job" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Jobs</SelectItem>
-            {uniqueJobs.map(j => <SelectItem key={j} value={j}>{j}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-40 border-[#D1D9E6]">
-            <SelectValue placeholder="Filter status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            {pipelineStages.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5A6B7F]" />
+        <Input
+          placeholder="Search by candidate name or job title..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-10 border-[#D1D9E6] focus-visible:ring-[#C4942A]/30"
+        />
       </motion.div>
 
-      {/* Bulk Actions */}
-      {selected.size > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: -5 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center gap-3 p-3 bg-[#F0F4F8] rounded-lg"
-        >
-          <span className="text-sm font-medium text-[#0B1D33]">{selected.size} selected</span>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="border-[#D1D9E6] text-[#1A3A5C]">
-                <CheckSquare className="w-3.5 h-3.5 mr-1.5" /> Bulk Actions
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem><UserCheck className="w-4 h-4 mr-2" /> Shortlist Selected</DropdownMenuItem>
-              <DropdownMenuItem><CalendarClock className="w-4 h-4 mr-2" /> Schedule Interviews</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-red-600"><XCircle className="w-4 h-4 mr-2" /> Reject Selected</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button variant="ghost" size="sm" className="ml-auto text-[#5A6B7F]" onClick={() => setSelected(new Set())}>
-            Clear
-          </Button>
-        </motion.div>
-      )}
+      {/* Results count */}
+      <p className="text-sm text-[#5A6B7F]">
+        Showing <span className="font-semibold text-[#0B1D33]">{filtered.length}</span>{' '}
+        {filtered.length === 1 ? 'application' : 'applications'}
+        {statusFilter !== 'all' && (
+          <>
+            {' '}
+            with status{' '}
+            <Badge
+              variant="outline"
+              className={`ml-1 text-xs ${STATUS_CONFIG[statusFilter as ApplicationStatus]?.bg || ''}`}
+            >
+              {STATUS_CONFIG[statusFilter as ApplicationStatus]?.label || statusFilter}
+            </Badge>
+          </>
+        )}
+      </p>
 
-      {/* Application List */}
+      {/* Application cards */}
       <div className="space-y-3">
-        {filtered.map((a, i) => (
-          <motion.div
-            key={a.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.04 }}
-          >
-            <Card className="border-[#D1D9E6] hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <Checkbox
-                    checked={selected.has(a.id)}
-                    onCheckedChange={() => toggleOne(a.id)}
-                    className="border-[#D1D9E6]"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-                      <h3 className="font-semibold text-[#0B1D33] text-sm">{a.candidate}</h3>
-                      <span className="text-xs text-[#5A6B7F] sm:hidden">{a.job}</span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-[#5A6B7F]">
-                      <span className="hidden sm:inline">{a.job}</span>
-                      <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{a.applied}</span>
-                      <Badge variant="secondary" className={`text-[10px] ${matchBadgeColor(a.matchScore)}`}>
-                        <Star className="w-3 h-3 mr-0.5" />{a.matchScore}%
-                      </Badge>
-                      <Badge variant="secondary" className={statusColors[a.status] || ''}>{a.status}</Badge>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <Button variant="ghost" size="sm" className="text-[#1A3A5C] hover:text-[#C4942A]"><Eye className="w-4 h-4" /></Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="text-[#5A6B7F]"><MoreHorizontal className="w-4 h-4" /></Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem><Eye className="w-4 h-4 mr-2" /> View Application</DropdownMenuItem>
-                        <DropdownMenuItem><UserCheck className="w-4 h-4 mr-2" /> Shortlist</DropdownMenuItem>
-                        <DropdownMenuItem><CalendarClock className="w-4 h-4 mr-2" /> Schedule Interview</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-red-600"><XCircle className="w-4 h-4 mr-2" /> Reject</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
+        <AnimatePresence mode="popLayout">
+          {filtered.map((app, i) => {
+            const isExpanded = expandedId === app.id
+            const cfg = STATUS_CONFIG[app.status]
+            const isUpdating = updatingStatus === app.id
+
+            return (
+              <motion.div
+                key={app.id}
+                layout
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ delay: i * 0.03 }}
+              >
+                <Card
+                  className={`border-[#D1D9E6] transition-shadow ${
+                    isExpanded
+                      ? 'shadow-md ring-1 ring-[#C4942A]/20'
+                      : 'hover:shadow-sm'
+                  }`}
+                >
+                  <CardContent className="p-4 sm:p-5">
+                    {/* Collapsed row */}
+                    <button
+                      type="button"
+                      className="w-full text-left flex items-start gap-3"
+                      onClick={() => toggleExpand(app.id)}
+                      aria-expanded={isExpanded}
+                    >
+                      {/* Avatar placeholder */}
+                      <div className="shrink-0 w-10 h-10 rounded-full bg-[#F7F9FC] border border-[#D1D9E6] flex items-center justify-center">
+                        <User className="w-4 h-4 text-[#5A6B7F]" />
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                          <h3 className="font-semibold text-[#0B1D33] text-sm truncate">
+                            {app.candidate_name}
+                          </h3>
+                          <span className="hidden sm:inline text-[#D1D9E6]">·</span>
+                          <span className="text-xs text-[#5A6B7F] truncate flex items-center gap-1">
+                            <Briefcase className="w-3 h-3 shrink-0" />
+                            {app.job_title}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] px-2 py-0 ${cfg?.bg || ''}`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${cfg?.dot} mr-1.5`}
+                            />
+                            {cfg?.label || app.status}
+                          </Badge>
+
+                          <span className="flex items-center gap-1 text-xs text-[#5A6B7F]">
+                            <Calendar className="w-3 h-3" />
+                            {formatDate(app.created_at)}
+                          </span>
+
+                          <span className="hidden sm:flex items-center gap-1 text-xs text-[#5A6B7F] max-w-[280px] truncate">
+                            <FileText className="w-3 h-3 shrink-0" />
+                            {truncate(app.cover_letter, 60)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Expand icon */}
+                      <div className="shrink-0 mt-0.5">
+                        {isExpanded ? (
+                          <ChevronUp className="w-4 h-4 text-[#5A6B7F]" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-[#5A6B7F]" />
+                        )}
+                      </div>
+                    </button>
+
+                    {/* Expanded detail */}
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="pt-4 mt-4 border-t border-[#D1D9E6] space-y-5">
+                            {/* Cover Letter */}
+                            <div>
+                              <h4 className="text-sm font-semibold text-[#0B1D33] flex items-center gap-1.5 mb-2">
+                                <FileText className="w-4 h-4 text-[#C4942A]" />
+                                Cover Letter
+                              </h4>
+                              <div className="bg-[#F7F9FC] border border-[#D1D9E6] rounded-lg p-4 text-sm text-[#0B1D33] leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">
+                                {app.cover_letter || (
+                                  <span className="text-[#5A6B7F] italic">
+                                    No cover letter provided
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Status update */}
+                            <div>
+                              <h4 className="text-sm font-semibold text-[#0B1D33] mb-2">
+                                Update Status
+                              </h4>
+                              <div className="flex flex-wrap gap-2">
+                                {ALL_STATUSES.map((s) => {
+                                  const sc = STATUS_CONFIG[s]
+                                  const isCurrent = app.status === s
+                                  return (
+                                    <Button
+                                      key={s}
+                                      size="sm"
+                                      variant={isCurrent ? 'default' : 'outline'}
+                                      disabled={isCurrent || isUpdating}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        updateStatus(app.id, s)
+                                      }}
+                                      className={
+                                        isCurrent
+                                          ? 'bg-[#C4942A] text-white hover:bg-[#C4942A]/90'
+                                          : `border-[#D1D9E6] text-[#0B1D33] hover:bg-[#F7F9FC] ${
+                                              isUpdating
+                                                ? 'opacity-50 cursor-not-allowed'
+                                                : ''
+                                            }`
+                                      }
+                                    >
+                                      <span
+                                        className={`w-2 h-2 rounded-full ${sc.dot} mr-1.5`}
+                                      />
+                                      {sc.label}
+                                    </Button>
+                                  )
+                                })}
+                              </div>
+                            </div>
+
+                            <Separator className="bg-[#D1D9E6]" />
+
+                            {/* Employer notes */}
+                            <div>
+                              <h4 className="text-sm font-semibold text-[#0B1D33] flex items-center gap-1.5 mb-2">
+                                <StickyNote className="w-4 h-4 text-[#C4942A]" />
+                                Employer Notes
+                              </h4>
+                              <Textarea
+                                placeholder="Add private notes about this candidate..."
+                                value={notesDraft[app.id] ?? ''}
+                                onChange={(e) =>
+                                  setNotesDraft((prev) => ({
+                                    ...prev,
+                                    [app.id]: e.target.value,
+                                  }))
+                                }
+                                className="min-h-[100px] border-[#D1D9E6] focus-visible:ring-[#C4942A]/30 resize-y"
+                              />
+                              <div className="flex justify-end mt-2">
+                                <Button
+                                  size="sm"
+                                  disabled={savingNotes === app.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    saveNotes(app.id)
+                                  }}
+                                  className="bg-[#C4942A] text-white hover:bg-[#C4942A]/90"
+                                >
+                                  {savingNotes === app.id ? (
+                                    <>
+                                      <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin mr-1.5" />
+                                      Saving…
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Save className="w-3.5 h-3.5 mr-1.5" />
+                                      Save Notes
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+
+                            {/* Meta row */}
+                            <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-[#5A6B7F]">
+                              <span>
+                                Applied:{' '}
+                                <span className="font-medium text-[#0B1D33]">
+                                  {formatDate(app.created_at)}
+                                </span>
+                              </span>
+                              <span>
+                                Last updated:{' '}
+                                <span className="font-medium text-[#0B1D33]">
+                                  {formatDate(app.updated_at)}
+                                </span>
+                              </span>
+                              <span>
+                                Application ID:{' '}
+                                <span className="font-medium text-[#0B1D33]">
+                                  {app.id.slice(0, 8)}
+                                  </span>
+                              </span>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )
+          })}
+        </AnimatePresence>
 
         {filtered.length === 0 && (
-          <div className="text-center py-12 text-[#5A6B7F]">
-            <p className="text-lg font-medium">No applications found</p>
-            <p className="text-sm mt-1">Try adjusting your search or filters</p>
-          </div>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center py-16"
+          >
+            <div className="mx-auto w-14 h-14 rounded-full bg-[#F7F9FC] border border-[#D1D9E6] flex items-center justify-center mb-4">
+              <FileText className="w-6 h-6 text-[#5A6B7F]" />
+            </div>
+            <p className="text-lg font-semibold text-[#0B1D33]">
+              No applications found
+            </p>
+            <p className="text-sm text-[#5A6B7F] mt-1">
+              {search || statusFilter !== 'all'
+                ? 'Try adjusting your search or filters'
+                : 'Applications will appear here when candidates apply to your jobs'}
+            </p>
+          </motion.div>
         )}
       </div>
     </div>

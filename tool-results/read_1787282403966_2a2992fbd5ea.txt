@@ -1,0 +1,597 @@
+     1→'use client'
+     2→
+     3→import { useState, useCallback } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import {
+     6→  Search, Eye, Mail, Phone, Calendar, Shield,
+     7→  MoreHorizontal, UserCheck, UserX, RefreshCw, Users,
+     8→} from 'lucide-react'
+     9→import { Card, CardContent } from '@/components/ui/card'
+    10→import { Button } from '@/components/ui/button'
+    11→import { Input } from '@/components/ui/input'
+    12→import { Badge } from '@/components/ui/badge'
+    13→import { Skeleton } from '@/components/ui/skeleton'
+    14→import { Switch } from '@/components/ui/switch'
+    15→import {
+    16→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
+    17→} from '@/components/ui/table'
+    18→import {
+    19→  Dialog, DialogContent, DialogHeader, DialogTitle
+    20→} from '@/components/ui/dialog'
+    21→import {
+    22→  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
+    23→} from '@/components/ui/dropdown-menu'
+    24→import { createClient } from '@/lib/supabase/client'
+    25→import { useAppStore } from '@/store/app-store'
+    26→import { toast } from 'sonner'
+    27→
+    28→type Profile = {
+    29→  id: string
+    30→  email: string | null
+    31→  name: string | null
+    32→  phone: string | null
+    33→  role: string | null
+    34→  is_active: boolean
+    35→  email_verified: boolean
+    36→  created_at: string
+    37→  updated_at: string
+    38→}
+    39→
+    40→const roleColors: Record<string, string> = {
+    41→  SUPER_ADMIN: 'bg-red-100 text-red-700 border-red-200',
+    42→  HOUSING_ADMIN: 'bg-blue-100 text-blue-700 border-blue-200',
+    43→  RECRUITMENT_ADMIN: 'bg-purple-100 text-purple-700 border-purple-200',
+    44→  HR_ADMIN: 'bg-teal-100 text-teal-700 border-teal-200',
+    45→  LOCAL_ADMIN: 'bg-orange-100 text-orange-700 border-orange-200',
+    46→  SUPPORT_STAFF: 'bg-gray-100 text-gray-700 border-gray-200',
+    47→  candidate: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    48→  employer: 'bg-amber-100 text-amber-700 border-amber-200',
+    49→  customer: 'bg-sky-100 text-sky-700 border-sky-200',
+    50→}
+    51→
+    52→const roleLabels: Record<string, string> = {
+    53→  SUPER_ADMIN: 'Super Admin',
+    54→  HOUSING_ADMIN: 'Housing Admin',
+    55→  RECRUITMENT_ADMIN: 'Recruitment Admin',
+    56→  HR_ADMIN: 'HR Admin',
+    57→  LOCAL_ADMIN: 'Local Admin',
+    58→  SUPPORT_STAFF: 'Support Staff',
+    59→  candidate: 'Candidate',
+    60→  employer: 'Employer',
+    61→  customer: 'Customer',
+    62→}
+    63→
+    64→const adminRoles = ['SUPER_ADMIN', 'HOUSING_ADMIN', 'RECRUITMENT_ADMIN', 'HR_ADMIN', 'LOCAL_ADMIN', 'SUPPORT_STAFF']
+    65→
+    66→const allRoles = ['ALL', ...adminRoles, 'candidate', 'employer', 'customer']
+    67→
+    68→function formatDate(dateStr: string): string {
+    69→  const d = new Date(dateStr)
+    70→  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    71→}
+    72→
+    73→function formatDateTime(dateStr: string): string {
+    74→  const d = new Date(dateStr)
+    75→  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) +
+    76→    ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    77→}
+    78→
+    79→function getInitials(name: string | null): string {
+    80→  if (!name) return '??'
+    81→  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    82→}
+    83→
+    84→// Skeleton rows for loading state
+    85→function TableSkeleton() {
+    86→  return (
+    87→    <>
+    88→      {Array.from({ length: 6 }).map((_, i) => (
+    89→        <TableRow key={i} className="border-[#1a2e1e]">
+    90→          <TableCell>
+    91→            <div className="flex items-center gap-3">
+    92→              <Skeleton className="h-8 w-8 rounded-full bg-[#0f1f12]" />
+    93→              <Skeleton className="h-4 w-32 bg-[#0f1f12]" />
+    94→            </div>
+    95→          </TableCell>
+    96→          <TableCell><Skeleton className="h-4 w-44 bg-[#0f1f12]" /></TableCell>
+    97→          <TableCell><Skeleton className="h-5 w-24 rounded-full bg-[#0f1f12]" /></TableCell>
+    98→          <TableCell><Skeleton className="h-4 w-16 bg-[#0f1f12]" /></TableCell>
+    99→          <TableCell><Skeleton className="h-4 w-28 bg-[#0f1f12]" /></TableCell>
+   100→          <TableCell><Skeleton className="h-8 w-8 bg-[#0f1f12]" /></TableCell>
+   101→        </TableRow>
+   102→      ))}
+   103→    </>
+   104→  )
+   105→}
+   106→
+   107→export default function AdminUsers() {
+   108→  const { user: currentUser } = useAppStore()
+   109→  const [profiles, setProfiles] = useState<Profile[]>([])
+   110→  const [loading, setLoading] = useState(true)
+   111→  const [togglingId, setTogglingId] = useState<string | null>(null)
+   112→  const [search, setSearch] = useState('')
+   113→  const [roleFilter, setRoleFilter] = useState('ALL')
+   114→  const [selectedUser, setSelectedUser] = useState<Profile | null>(null)
+   115→
+   116→  const fetchProfiles = useCallback(async () => {
+   117→    setLoading(true)
+   118→    try {
+   119→      const supabase = createClient()
+   120→      const { data, error } = await supabase
+   121→        .from('profiles')
+   122→        .select('*')
+   123→        .order('created_at', { ascending: false })
+   124→
+   125→      if (error) throw error
+   126→      setProfiles((data as Profile[]) ?? [])
+   127→    } catch (err: unknown) {
+   128→      const message = err instanceof Error ? err.message : 'Failed to load users'
+   129→      toast.error(message)
+   130→    } finally {
+   131→      setLoading(false)
+   132→    }
+   133→  }, [])
+   134→
+   135→  // Fetch profiles on initial mount via useState initializer
+   136→  // to avoid useEffect + setState (React 19 strict lint).
+   137→  const [fetched] = useState(() => {
+   138→    // IIFE on initial render to trigger fetch without useEffect
+   139→    createClient()
+   140→      .from('profiles')
+   141→      .select('*')
+   142→      .order('created_at', { ascending: false })
+   143→      .then(({ data, error }) => {
+   144→        if (error) {
+   145→          toast.error(error.message)
+   146→        } else {
+   147→          setProfiles((data as Profile[]) ?? [])
+   148→        }
+   149→        setLoading(false)
+   150→      })
+   151→    return true
+   152→  })
+   153→
+   154→  const filtered = profiles.filter((u) => {
+   155→    const name = (u.name ?? '').toLowerCase()
+   156→    const email = (u.email ?? '').toLowerCase()
+   157→    const matchesSearch = name.includes(search.toLowerCase()) || email.includes(search.toLowerCase())
+   158→    const matchesRole = roleFilter === 'ALL' || u.role === roleFilter
+   159→    return matchesSearch && matchesRole
+   160→  })
+   161→
+   162→  const handleToggleActive = async (profile: Profile) => {
+   163→    if (togglingId) return
+   164→    const newStatus = !profile.is_active
+   165→    const actionLabel = newStatus ? 'activated' : 'deactivated'
+   166→    setTogglingId(profile.id)
+   167→
+   168→    try {
+   169→      const supabase = createClient()
+   170→      const { error } = await supabase
+   171→        .from('profiles')
+   172→        .update({ is_active: newStatus })
+   173→        .eq('id', profile.id)
+   174→
+   175→      if (error) throw error
+   176→
+   177→      setProfiles(prev => prev.map(p =>
+   178→        p.id === profile.id ? { ...p, is_active: newStatus } : p
+   179→      ))
+   180→
+   181→      toast.success(`${profile.name ?? profile.email} has been ${actionLabel}`)
+   182→      if (selectedUser?.id === profile.id) {
+   183→        setSelectedUser(prev => prev ? { ...prev, is_active: newStatus } : null)
+   184→      }
+   185→    } catch (err: unknown) {
+   186→      const message = err instanceof Error ? err.message : `Failed to ${actionLabel} user`
+   187→      toast.error(message)
+   188→    } finally {
+   189→      setTogglingId(null)
+   190→    }
+   191→  }
+   192→
+   193→  const handleRefresh = () => {
+   194→    fetchProfiles()
+   195→  }
+   196→
+   197→  return (
+   198→    <div className="space-y-6">
+   199→      {/* Header */}
+   200→      <div className="flex items-center justify-between">
+   201→        <div>
+   202→          <h1 className="text-2xl font-bold text-[#FAF8F5]">User Management</h1>
+   203→          <p className="text-[#7a8f8a] mt-1">Manage platform users, roles, and permissions</p>
+   204→        </div>
+   205→        <Button
+   206→          variant="outline"
+   207→          size="sm"
+   208→          onClick={handleRefresh}
+   209→          disabled={loading}
+   210→          className="border-[#1a2e1e] text-[#7a8f8a] hover:bg-[#0f1f12] hover:text-[#FAF8F5]"
+   211→        >
+   212→          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+   213→          Refresh
+   214→        </Button>
+   215→      </div>
+   216→
+   217→      {/* Stats Row */}
+   218→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   219→        <Card className="bg-[#0a1a0e] border-[#1a2e1e]">
+   220→          <CardContent className="p-4">
+   221→            <div className="flex items-center gap-3">
+   222→              <div className="h-10 w-10 rounded-lg bg-[#0f2a16] flex items-center justify-center">
+   223→                <Users className="h-5 w-5 text-[#4ade80]" />
+   224→              </div>
+   225→              <div>
+   226→                <p className="text-2xl font-bold text-[#FAF8F5]">{profiles.length}</p>
+   227→                <p className="text-xs text-[#7a8f8a]">Total Users</p>
+   228→              </div>
+   229→            </div>
+   230→          </CardContent>
+   231→        </Card>
+   232→        <Card className="bg-[#0a1a0e] border-[#1a2e1e]">
+   233→          <CardContent className="p-4">
+   234→            <div className="flex items-center gap-3">
+   235→              <div className="h-10 w-10 rounded-lg bg-[#0f2a16] flex items-center justify-center">
+   236→                <UserCheck className="h-5 w-5 text-[#4ade80]" />
+   237→              </div>
+   238→              <div>
+   239→                <p className="text-2xl font-bold text-[#FAF8F5]">
+   240→                  {profiles.filter(p => p.is_active).length}
+   241→                </p>
+   242→                <p className="text-xs text-[#7a8f8a]">Active</p>
+   243→              </div>
+   244→            </div>
+   245→          </CardContent>
+   246→        </Card>
+   247→        <Card className="bg-[#0a1a0e] border-[#1a2e1e]">
+   248→          <CardContent className="p-4">
+   249→            <div className="flex items-center gap-3">
+   250→              <div className="h-10 w-10 rounded-lg bg-[#2a0f0f] flex items-center justify-center">
+   251→                <UserX className="h-5 w-5 text-[#f87171]" />
+   252→              </div>
+   253→              <div>
+   254→                <p className="text-2xl font-bold text-[#FAF8F5]">
+   255→                  {profiles.filter(p => !p.is_active).length}
+   256→                </p>
+   257→                <p className="text-xs text-[#7a8f8a]">Inactive</p>
+   258→              </div>
+   259→            </div>
+   260→          </CardContent>
+   261→        </Card>
+   262→        <Card className="bg-[#0a1a0e] border-[#1a2e1e]">
+   263→          <CardContent className="p-4">
+   264→            <div className="flex items-center gap-3">
+   265→              <div className="h-10 w-10 rounded-lg bg-[#0f2a16] flex items-center justify-center">
+   266→                <Shield className="h-5 w-5 text-[#4ade80]" />
+   267→              </div>
+   268→              <div>
+   269→                <p className="text-2xl font-bold text-[#FAF8F5]">
+   270→                  {profiles.filter(p => adminRoles.includes(p.role ?? '')).length}
+   271→                </p>
+   272→                <p className="text-xs text-[#7a8f8a]">Admin Users</p>
+   273→              </div>
+   274→            </div>
+   275→          </CardContent>
+   276→        </Card>
+   277→      </div>
+   278→
+   279→      {/* Filters */}
+   280→      <motion.div
+   281→        initial={{ opacity: 0, y: -10 }}
+   282→        animate={{ opacity: 1, y: 0 }}
+   283→        className="flex flex-col sm:flex-row gap-3"
+   284→      >
+   285→        <div className="relative flex-1">
+   286→          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#7a8f8a]" />
+   287→          <Input
+   288→            placeholder="Search by name or email..."
+   289→            value={search}
+   290→            onChange={(e) => setSearch(e.target.value)}
+   291→            className="pl-9 bg-[#0a1a0e] border-[#1a2e1e] text-[#FAF8F5] placeholder:text-[#5a6f65] focus-visible:ring-[#1a3a1e] focus-visible:border-[#2a4e2e]"
+   292→          />
+   293→        </div>
+   294→        <div className="flex gap-2 flex-wrap">
+   295→          {allRoles.map((role) => (
+   296→            <Button
+   297→              key={role}
+   298→              variant={roleFilter === role ? 'default' : 'outline'}
+   299→              size="sm"
+   300→              className={
+   301→                roleFilter === role
+   302→                  ? 'bg-[#1a3a1e] text-[#4ade80] hover:bg-[#1f4a24] border-[#2a5e2e]'
+   303→                  : 'border-[#1a2e1e] text-[#7a8f8a] hover:bg-[#0f1f12] hover:text-[#FAF8F5]'
+   304→              }
+   305→              onClick={() => setRoleFilter(role)}
+   306→            >
+   307→              {role === 'ALL' ? 'All Roles' : (roleLabels[role] ?? role)}
+   308→            </Button>
+   309→          ))}
+   310→        </div>
+   311→      </motion.div>
+   312→
+   313→      {/* Users Table */}
+   314→      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+   315→        <Card className="bg-[#0a1a0e] border-[#1a2e1e]">
+   316→          <CardContent className="p-0">
+   317→            <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+   318→              <Table>
+   319→                <TableHeader>
+   320→                  <TableRow className="border-[#1a2e1e] bg-[#0f1f12] hover:bg-[#0f1f12]">
+   321→                    <TableHead className="text-[#7a8f8a] font-medium">Name</TableHead>
+   322→                    <TableHead className="text-[#7a8f8a] font-medium">Email</TableHead>
+   323→                    <TableHead className="text-[#7a8f8a] font-medium">Role</TableHead>
+   324→                    <TableHead className="text-[#7a8f8a] font-medium">Status</TableHead>
+   325→                    <TableHead className="text-[#7a8f8a] font-medium">Created</TableHead>
+   326→                    <TableHead className="text-[#7a8f8a] font-medium text-right">Actions</TableHead>
+   327→                  </TableRow>
+   328→                </TableHeader>
+   329→                <TableBody>
+   330→                  {loading ? (
+   331→                    <TableSkeleton />
+   332→                  ) : filtered.length === 0 ? (
+   333→                    <TableRow className="border-[#1a2e1e]">
+   334→                      <TableCell colSpan={6} className="h-40 text-center">
+   335→                        <div className="flex flex-col items-center gap-2 text-[#5a6f65]">
+   336→                          <Users className="h-10 w-10" />
+   337→                          <p className="text-sm">No users found</p>
+   338→                          <p className="text-xs">Try adjusting your search or filter</p>
+   339→                        </div>
+   340→                      </TableCell>
+   341→                    </TableRow>
+   342→                  ) : (
+   343→                    <AnimatePresence mode="popLayout">
+   344→                      {filtered.map((user) => (
+   345→                        <motion.tr
+   346→                          key={user.id}
+   347→                          layout
+   348→                          initial={{ opacity: 0, y: 10 }}
+   349→                          animate={{ opacity: 1, y: 0 }}
+   350→                          exit={{ opacity: 0, y: -10 }}
+   351→                          transition={{ duration: 0.2 }}
+   352→                          className="border-[#1a2e1e] hover:bg-[#0f1f12] transition-colors"
+   353→                        >
+   354→                          <TableCell>
+   355→                            <div className="flex items-center gap-3">
+   356→                              <div className="h-8 w-8 rounded-full bg-[#1a3a1e] text-[#4ade80] flex items-center justify-center text-xs font-semibold shrink-0">
+   357→                                {getInitials(user.name)}
+   358→                              </div>
+   359→                              <span className="font-medium text-[#FAF8F5] whitespace-nowrap">
+   360→                                {user.name ?? 'Unnamed'}
+   361→                              </span>
+   362→                            </div>
+   363→                          </TableCell>
+   364→                          <TableCell className="text-[#7a8f8a] whitespace-nowrap">
+   365→                            {user.email ?? '—'}
+   366→                          </TableCell>
+   367→                          <TableCell>
+   368→                            <Badge
+   369→                              variant="outline"
+   370→                              className={roleColors[user.role ?? ''] ?? 'bg-gray-100 text-gray-500 border-gray-200'}
+   371→                            >
+   372→                              {roleLabels[user.role ?? ''] ?? user.role ?? 'Unknown'}
+   373→                            </Badge>
+   374→                          </TableCell>
+   375→                          <TableCell>
+   376→                            <div className="flex items-center gap-2">
+   377→                              <span
+   378→                                className={`inline-flex items-center gap-1.5 text-sm ${
+   379→                                  user.is_active ? 'text-[#4ade80]' : 'text-[#f87171]'
+   380→                                }`}
+   381→                              >
+   382→                                <span
+   383→                                  className={`h-2 w-2 rounded-full ${
+   384→                                    user.is_active ? 'bg-[#4ade80]' : 'bg-[#f87171]'
+   385→                                  }`}
+   386→                                />
+   387→                                {user.is_active ? 'Active' : 'Inactive'}
+   388→                              </span>
+   389→                            </div>
+   390→                          </TableCell>
+   391→                          <TableCell className="text-[#7a8f8a] text-sm whitespace-nowrap">
+   392→                            {formatDate(user.created_at)}
+   393→                          </TableCell>
+   394→                          <TableCell>
+   395→                            <div className="flex items-center justify-end gap-1">
+   396→                              <Button
+   397→                                variant="ghost"
+   398→                                size="icon"
+   399→                                className="h-8 w-8 text-[#7a8f8a] hover:text-[#FAF8F5] hover:bg-[#1a2e1e]"
+   400→                                onClick={() => setSelectedUser(user)}
+   401→                              >
+   402→                                <Eye className="h-4 w-4" />
+   403→                              </Button>
+   404→                              <DropdownMenu>
+   405→                                <DropdownMenuTrigger asChild>
+   406→                                  <Button
+   407→                                    variant="ghost"
+   408→                                    size="icon"
+   409→                                    className="h-8 w-8 text-[#7a8f8a] hover:text-[#FAF8F5] hover:bg-[#1a2e1e]"
+   410→                                  >
+   411→                                    <MoreHorizontal className="h-4 w-4" />
+   412→                                  </Button>
+   413→                                </DropdownMenuTrigger>
+   414→                                <DropdownMenuContent
+   415→                                  align="end"
+   416→                                  className="bg-[#0a1a0e] border-[#1a2e1e]"
+   417→                                >
+   418→                                  <DropdownMenuItem
+   419→                                    className="text-[#FAF8F5] focus:bg-[#1a2e1e] focus:text-[#4ade80]"
+   420→                                    onClick={() => setSelectedUser(user)}
+   421→                                  >
+   422→                                    <Eye className="h-4 w-4 mr-2" /> View Details
+   423→                                  </DropdownMenuItem>
+   424→                                  <DropdownMenuItem
+   425→                                    className="text-[#FAF8F5] focus:bg-[#1a2e1e] focus:text-[#4ade80]"
+   426→                                    onClick={() => handleToggleActive(user)}
+   427→                                    disabled={togglingId === user.id || currentUser?.id === user.id}
+   428→                                  >
+   429→                                    {user.is_active ? (
+   430→                                      <><UserX className="h-4 w-4 mr-2" /> Deactivate</>
+   431→                                    ) : (
+   432→                                      <><UserCheck className="h-4 w-4 mr-2" /> Activate</>
+   433→                                    )}
+   434→                                  </DropdownMenuItem>
+   435→                                </DropdownMenuContent>
+   436→                              </DropdownMenu>
+   437→                            </div>
+   438→                          </TableCell>
+   439→                        </motion.tr>
+   440→                      ))}
+   441→                    </AnimatePresence>
+   442→                  )}
+   443→                </TableBody>
+   444→              </Table>
+   445→            </div>
+   446→          </CardContent>
+   447→        </Card>
+   448→      </motion.div>
+   449→
+   450→      {/* Results count */}
+   451→      {!loading && profiles.length > 0 && (
+   452→        <motion.p
+   453→          initial={{ opacity: 0 }}
+   454→          animate={{ opacity: 1 }}
+   455→          className="text-xs text-[#5a6f65] text-right"
+   456→        >
+   457→          Showing {filtered.length} of {profiles.length} users
+   458→        </motion.p>
+   459→      )}
+   460→
+   461→      {/* User Detail Dialog */}
+   462→      <Dialog open={!!selectedUser} onOpenChange={(open) => !open && setSelectedUser(null)}>
+   463→        <DialogContent className="max-w-lg bg-[#0a1a0e] border-[#1a2e1e]">
+   464→          <DialogHeader>
+   465→            <DialogTitle className="text-[#FAF8F5]">User Details</DialogTitle>
+   466→          </DialogHeader>
+   467→          {selectedUser && (
+   468→            <motion.div
+   469→              key={selectedUser.id}
+   470→              initial={{ opacity: 0, scale: 0.97 }}
+   471→              animate={{ opacity: 1, scale: 1 }}
+   472→              className="space-y-5"
+   473→            >
+   474→              {/* Profile Header */}
+   475→              <div className="flex items-center gap-4">
+   476→                <div className="h-14 w-14 rounded-full bg-[#1a3a1e] text-[#4ade80] flex items-center justify-center text-lg font-semibold shrink-0">
+   477→                  {getInitials(selectedUser.name)}
+   478→                </div>
+   479→                <div className="min-w-0">
+   480→                  <h3 className="text-lg font-semibold text-[#FAF8F5] truncate">
+   481→                    {selectedUser.name ?? 'Unnamed'}
+   482→                  </h3>
+   483→                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+   484→                    <Badge
+   485→                      variant="outline"
+   486→                      className={roleColors[selectedUser.role ?? ''] ?? 'bg-gray-100 text-gray-500 border-gray-200'}
+   487→                    >
+   488→                      {roleLabels[selectedUser.role ?? ''] ?? selectedUser.role ?? 'Unknown'}
+   489→                    </Badge>
+   490→                    <span
+   491→                      className={`inline-flex items-center gap-1.5 text-xs ${
+   492→                        selectedUser.is_active ? 'text-[#4ade80]' : 'text-[#f87171]'
+   493→                      }`}
+   494→                    >
+   495→                      <span
+   496→                        className={`h-1.5 w-1.5 rounded-full ${
+   497→                          selectedUser.is_active ? 'bg-[#4ade80]' : 'bg-[#f87171]'
+   498→                        }`}
+   499→                      />
+   500→                      {selectedUser.is_active ? 'Active' : 'Inactive'}
+   501→                    </span>
+   502→                    {selectedUser.email_verified && (
+   503→                      <Badge variant="outline" className="bg-[#0f2a16] text-[#4ade80] border-[#1a3a1e] text-[10px]">
+   504→                        Verified
+   505→                      </Badge>
+   506→                    )}
+   507→                  </div>
+   508→                </div>
+   509→              </div>
+   510→
+   511→              {/* Details Grid */}
+   512→              <div className="grid grid-cols-2 gap-4">
+   513→                <div className="space-y-1">
+   514→                  <p className="text-xs text-[#5a6f65]">Email</p>
+   515→                  <div className="flex items-center gap-2 text-sm text-[#FAF8F5]">
+   516→                    <Mail className="h-3.5 w-3.5 text-[#5a6f65] shrink-0" />
+   517→                    <span className="truncate">{selectedUser.email ?? '—'}</span>
+   518→                  </div>
+   519→                </div>
+   520→                <div className="space-y-1">
+   521→                  <p className="text-xs text-[#5a6f65]">Phone</p>
+   522→                  <div className="flex items-center gap-2 text-sm text-[#FAF8F5]">
+   523→                    <Phone className="h-3.5 w-3.5 text-[#5a6f65] shrink-0" />
+   524→                    {selectedUser.phone ?? '—'}
+   525→                  </div>
+   526→                </div>
+   527→                <div className="space-y-1">
+   528→                  <p className="text-xs text-[#5a6f65]">Role</p>
+   529→                  <div className="flex items-center gap-2 text-sm text-[#FAF8F5]">
+   530→                    <Shield className="h-3.5 w-3.5 text-[#5a6f65] shrink-0" />
+   531→                    {roleLabels[selectedUser.role ?? ''] ?? selectedUser.role ?? 'Unknown'}
+   532→                  </div>
+   533→                </div>
+   534→                <div className="space-y-1">
+   535→                  <p className="text-xs text-[#5a6f65]">Account Status</p>
+   536→                  <div className="flex items-center gap-2 text-sm text-[#FAF8F5]">
+   537→                    <UserCheck className="h-3.5 w-3.5 text-[#5a6f65] shrink-0" />
+   538→                    {selectedUser.is_active ? 'Active' : 'Inactive'}
+   539→                  </div>
+   540→                </div>
+   541→                <div className="space-y-1">
+   542→                  <p className="text-xs text-[#5a6f65]">Created</p>
+   543→                  <div className="flex items-center gap-2 text-sm text-[#FAF8F5]">
+   544→                    <Calendar className="h-3.5 w-3.5 text-[#5a6f65] shrink-0" />
+   545→                    {formatDateTime(selectedUser.created_at)}
+   546→                  </div>
+   547→                </div>
+   548→                <div className="space-y-1">
+   549→                  <p className="text-xs text-[#5a6f65]">Last Updated</p>
+   550→                  <div className="flex items-center gap-2 text-sm text-[#FAF8F5]">
+   551→                    <Calendar className="h-3.5 w-3.5 text-[#5a6f65] shrink-0" />
+   552→                    {formatDateTime(selectedUser.updated_at)}
+   553→                  </div>
+   554→                </div>
+   555→              </div>
+   556→
+   557→              {/* Toggle Active Switch */}
+   558→              <div className="flex items-center justify-between p-3 rounded-lg bg-[#0f1f12] border border-[#1a2e1e]">
+   559→                <div className="space-y-0.5">
+   560→                  <p className="text-sm font-medium text-[#FAF8F5]">Active Status</p>
+   561→                  <p className="text-xs text-[#5a6f65]">
+   562→                    {selectedUser.is_active
+   563→                      ? 'User can access the platform'
+   564→                      : 'User is currently deactivated'
+   565→                    }
+   566→                  </p>
+   567→                </div>
+   568→                <Switch
+   569→                  checked={selectedUser.is_active}
+   570→                  onCheckedChange={() => handleToggleActive(selectedUser)}
+   571→                  disabled={togglingId === selectedUser.id || currentUser?.id === selectedUser.id}
+   572→                />
+   573→              </div>
+   574→
+   575→              {/* Action Buttons */}
+   576→              <div className="flex gap-2 pt-1">
+   577→                <Button
+   578→                  className="flex-1 bg-[#1a3a1e] text-[#4ade80] hover:bg-[#1f4a24]"
+   579→                  onClick={() => handleToggleActive(selectedUser)}
+   580→                  disabled={togglingId === selectedUser.id || currentUser?.id === selectedUser.id}
+   581→                >
+   582→                  {togglingId === selectedUser.id ? (
+   583→                    <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Updating...</>
+   584→                  ) : selectedUser.is_active ? (
+   585→                    <><UserX className="h-4 w-4 mr-2" /> Deactivate User</>
+   586→                  ) : (
+   587→                    <><UserCheck className="h-4 w-4 mr-2" /> Activate User</>
+   588→                  )}
+   589→                </Button>
+   590→              </div>
+   591→            </motion.div>
+   592→          )}
+   593→        </DialogContent>
+   594→      </Dialog>
+   595→    </div>
+   596→  )
+   597→}
