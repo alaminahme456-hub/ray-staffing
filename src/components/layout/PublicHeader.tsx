@@ -53,10 +53,7 @@ export function PublicHeader() {
           {/* Logo */}
           <button onClick={() => handleNav('home')} className="flex items-center gap-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C4942A] rounded-sm">
             <img src="/images/logo.jpg" alt="RAY" className="h-9 w-9 rounded-lg object-cover" />
-            <div className="flex flex-col">
-              <span className="text-lg font-bold tracking-tight text-[#FAF8F5] leading-none">RAY</span>
-              <span className="text-[9px] font-medium tracking-[0.15em] text-[#8A9B8E] uppercase leading-none mt-0.5">Staffing Consulting</span>
-            </div>
+            <span className="text-lg font-bold tracking-tight text-[#FAF8F5] leading-none">RAY</span>
           </button>
 
           {/* Desktop Navigation */}
