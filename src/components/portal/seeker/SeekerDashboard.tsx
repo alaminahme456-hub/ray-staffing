@@ -22,71 +22,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
+import { createClient } from '@/lib/supabase/client'
 
-const pipelineStages = [
-  { key: 'applied', label: 'Applied', count: 12, icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' },
-  { key: 'shortlisted', label: 'Shortlisted', count: 5, icon: UserCheck, color: 'text-[#C4942A]', bg: 'bg-amber-50', border: 'border-amber-200' },
-  { key: 'interview', label: 'Interview', count: 3, icon: CalendarCheck, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200' },
-  { key: 'offer', label: 'Offer', count: 1, icon: Award, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-  { key: 'rejected', label: 'Rejected', count: 3, icon: XCircle, color: 'text-red-500', bg: 'bg-red-50', border: 'border-red-200' },
-]
-
-const missingItems = [
-  'Add a cover letter template',
-  'Complete skills profile',
-  'Add two professional references',
-]
-
-const recommendedJobs = [
-  {
-    id: 1,
-    title: 'Senior Staff Nurse - ICU',
-    employer: 'Barts Health NHS Trust',
-    location: 'London, EC1A',
-    salary: '£38,000 - £44,000',
-    match: 95,
-    type: 'Full-time',
-    posted: '1 day ago',
-  },
-  {
-    id: 2,
-    title: 'Nurse Practitioner',
-    employer: 'Guy’s and St Thomas’ NHS FT',
-    location: 'London, SE1',
-    salary: '£42,000 - £50,000',
-    match: 88,
-    type: 'Full-time',
-    posted: '3 days ago',
-  },
-  {
-    id: 3,
-    title: 'Charge Nurse - A&E',
-    employer: 'Imperial College Healthcare',
-    location: 'London, W2',
-    salary: '£36,000 - £41,000',
-    match: 82,
-    type: 'Full-time',
-    posted: '5 days ago',
-  },
-  {
-    id: 4,
-    title: 'Community Mental Health Nurse',
-    employer: 'South London and Maudsley',
-    location: 'London, SE5',
-    salary: '£34,000 - £40,000',
-    match: 76,
-    type: 'Full-time',
-    posted: '1 week ago',
-  },
-]
-
-const recentActivity = [
-  { id: 1, icon: UserCheck, iconColor: 'text-[#C4942A]', text: 'Shortlisted for Senior Staff Nurse at Barts Health', time: '2 hours ago' },
-  { id: 2, icon: CalendarCheck, iconColor: 'text-purple-600', text: 'Interview scheduled: Charge Nurse at Imperial College', time: '5 hours ago' },
-  { id: 3, icon: FileText, iconColor: 'text-blue-600', text: 'Application submitted: Nurse Practitioner at Guy’s and St Thomas’', time: '1 day ago' },
-  { id: 4, icon: Zap, iconColor: 'text-amber-500', text: 'New job match: ICU Staff Nurse at Royal Free London', time: '1 day ago' },
-  { id: 5, icon: Award, iconColor: 'text-emerald-600', text: 'Offer received: Senior Healthcare Assistant at Nuffield Health', time: '2 days ago' },
-]
+interface DashboardData {
+  profileComplete: number
+  applicationCounts: { pending: number; shortlisted: number; interviewing: number; offered: number; rejected: number; withdrawn: number; placed: number }
+  recentJobs: { id: string; title: string; location: string; salary_min: number; salary_max: number; job_type: string; sector: string; created_at: string }[]
+}
 
 function CircularProgress({ percentage, size = 100, strokeWidth = 8 }: { percentage: number; size?: number; strokeWidth?: number }) {
   const radius = (size - strokeWidth) / 2
@@ -95,23 +37,10 @@ function CircularProgress({ percentage, size = 100, strokeWidth = 8 }: { percent
 
   return (
     <svg width={size} height={size} className="-rotate-90">
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        stroke="#E2E8F0"
-        strokeWidth={strokeWidth}
-        fill="none"
-      />
+      <circle cx={size / 2} cy={size / 2} r={radius} stroke="#E2E8F0" strokeWidth={strokeWidth} fill="none" />
       <motion.circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        stroke="#C4942A"
-        strokeWidth={strokeWidth}
-        fill="none"
-        strokeLinecap="round"
-        strokeDasharray={circumference}
+        cx={size / 2} cy={size / 2} r={radius} stroke="#C4942A" strokeWidth={strokeWidth} fill="none"
+        strokeLinecap="round" strokeDasharray={circumference}
         initial={{ strokeDashoffset: circumference }}
         animate={{ strokeDashoffset: offset }}
         transition={{ duration: 1.2, ease: 'easeOut', delay: 0.5 }}
@@ -123,7 +52,8 @@ function CircularProgress({ percentage, size = 100, strokeWidth = 8 }: { percent
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
-      <Skeleton className="h-16 w-full max-w-md rounded-xl" />\n      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <Skeleton className="h-16 w-full max-w-md rounded-xl" />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {Array.from({ length: 5 }).map((_, i) => (
           <Skeleton key={i} className="h-28 rounded-xl" />
         ))}
@@ -132,32 +62,73 @@ function DashboardSkeleton() {
         <Skeleton className="h-72 rounded-xl" />
         <Skeleton className="h-72 lg:col-span-2 rounded-xl" />
       </div>
-      <Skeleton className="h-64 rounded-xl" />
     </div>
   )
 }
 
 export default function SeekerDashboard() {
-  const [loading, setLoading] = useState(true)
+  const user = useAppStore((s) => s.user)
   const navigate = useAppStore((s) => s.navigate)
+  const [data, setData] = useState<DashboardData | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 800)
-    return () => clearTimeout(timer)
-  }, [])
+    if (!user) return
+    async function fetchDashboard() {
+      const supabase = createClient()
+      try {
+        const [profileRes, appsRes, jobsRes] = await Promise.all([
+          supabase.from('candidate_profiles').select('profile_complete').eq('id', user.id).single(),
+          supabase.from('applications').select('status').eq('candidate_id', user.id),
+          supabase.from('jobs').select('id, title, location, salary_min, salary_max, job_type, sector, created_at').eq('status', 'active').order('created_at', { ascending: false }).limit(4),
+        ])
 
-  if (loading) return <DashboardSkeleton />
+        const profile = profileRes.data
+        const apps = appsRes.data || []
+        const jobs = jobsRes.data || []
+
+        const counts = { pending: 0, shortlisted: 0, interviewing: 0, offered: 0, rejected: 0, withdrawn: 0, placed: 0 }
+        apps.forEach(a => {
+          const s = a.status as keyof typeof counts
+          if (s in counts) counts[s]++
+        })
+
+        setData({
+          profileComplete: profile?.profile_complete || 0,
+          applicationCounts: counts,
+          recentJobs: jobs,
+        })
+      } catch (err) {
+        console.error('Failed to fetch seeker dashboard:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchDashboard()
+  }, [user])
+
+  if (loading || !data) return <DashboardSkeleton />
+
+  const pipelineStages = [
+    { key: 'pending', label: 'Applied', count: data.applicationCounts.pending, icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' },
+    { key: 'shortlisted', label: 'Shortlisted', count: data.applicationCounts.shortlisted, icon: UserCheck, color: 'text-[#C4942A]', bg: 'bg-amber-50', border: 'border-amber-200' },
+    { key: 'interviewing', label: 'Interview', count: data.applicationCounts.interviewing, icon: CalendarCheck, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200' },
+    { key: 'offered', label: 'Offer', count: data.applicationCounts.offered, icon: Award, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+    { key: 'rejected', label: 'Rejected', count: data.applicationCounts.rejected, icon: XCircle, color: 'text-red-500', bg: 'bg-red-50', border: 'border-red-200' },
+  ]
+
+  const missingItems = data.profileComplete < 100
+    ? ['Complete your skills profile', 'Upload your CV', 'Add professional references']
+    : []
+
+  const firstName = user?.name?.split(' ')[0] || 'there'
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Welcome */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-      >
-        <h1 className="text-2xl sm:text-3xl font-bold text-[#0B1D33]">Welcome back, Amara</h1>
-        <p className="text-[#5A6B7F] mt-1">Here’s an overview of your job search activity.</p>
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+        <h1 className="text-2xl sm:text-3xl font-bold text-[#0B1D33]">Welcome back, {firstName}</h1>
+        <p className="text-[#5A6B7F] mt-1">Here's an overview of your job search activity.</p>
       </motion.div>
 
       {/* Pipeline Cards */}
@@ -165,14 +136,8 @@ export default function SeekerDashboard() {
         {pipelineStages.map((stage, i) => {
           const Icon = stage.icon
           return (
-            <motion.div
-              key={stage.key}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.05 * i }}
-              className="cursor-pointer"
-              onClick={() => navigate('seeker-applications')}
-            >
+            <motion.div key={stage.key} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.05 * i }} className="cursor-pointer" onClick={() => navigate('seeker-applications')}>
               <Card className={`${stage.bg} ${stage.border} border hover:shadow-md transition-shadow h-full`}>
                 <CardContent className="p-4 flex flex-col items-center text-center gap-2">
                   <div className={`w-10 h-10 rounded-full bg-white flex items-center justify-center ${stage.color} shadow-sm`}>
@@ -187,152 +152,117 @@ export default function SeekerDashboard() {
         })}
       </div>
 
-      {/* Profile Completion + Recommended Jobs */}
+      {/* Profile Completion + Recent Jobs */}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Profile Completion */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.3 }}
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.3 }}>
           <Card className="border-[#D1D9E6] h-full">
             <CardHeader className="pb-3">
               <CardTitle className="text-base font-semibold text-[#0B1D33] flex items-center gap-2">
-                <Star className="w-4 h-4 text-[#C4942A]" />
-                Profile Completion
+                <Star className="w-4 h-4 text-[#C4942A]" /> Profile Completion
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex justify-center">
                 <div className="relative">
-                  <CircularProgress percentage={85} />
+                  <CircularProgress percentage={data.profileComplete} />
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-xl font-bold text-[#0B1D33]">85%</span>
+                    <span className="text-xl font-bold text-[#0B1D33]">{data.profileComplete}%</span>
                   </div>
                 </div>
               </div>
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-[#5A6B7F]">To complete your profile:</p>
-                {missingItems.map((item) => (
-                  <div key={item} className="flex items-start gap-2">
-                    <AlertCircle className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
-                    <p className="text-xs text-[#0B1D33]">{item}</p>
-                  </div>
-                ))}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full border-[#C4942A] text-[#C4942A] hover:bg-[#C4942A] hover:text-white"
-                onClick={() => navigate('seeker-profile')}
-              >
-                Complete Profile
+              {missingItems.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-[#5A6B7F]">To complete your profile:</p>
+                  {missingItems.map((item) => (
+                    <div key={item} className="flex items-start gap-2">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
+                      <p className="text-xs text-[#0B1D33]">{item}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Button variant="outline" size="sm" className="w-full border-[#C4942A] text-[#C4942A] hover:bg-[#C4942A] hover:text-white"
+                onClick={() => navigate('seeker-profile')}>
+                {data.profileComplete >= 100 ? 'View Profile' : 'Complete Profile'}
               </Button>
             </CardContent>
           </Card>
         </motion.div>
 
-        {/* Recommended Jobs */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.35 }}
-          className="lg:col-span-2"
-        >
+        {/* Recent Jobs */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.35 }} className="lg:col-span-2">
           <Card className="border-[#D1D9E6] h-full">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base font-semibold text-[#0B1D33] flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-[#C4942A]" />
-                  Recommended Jobs
+                  <TrendingUp className="w-4 h-4 text-[#C4942A]" /> Latest Jobs
                 </CardTitle>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-[#C4942A] hover:text-[#C4942A] hover:bg-amber-50 text-xs"
-                  onClick={() => navigate('seeker-jobs')}
-                >
+                <Button variant="ghost" size="sm" className="text-[#C4942A] hover:text-[#C4942A] hover:bg-amber-50 text-xs" onClick={() => navigate('seeker-jobs')}>
                   View All <ChevronRight className="w-3 h-3 ml-1" />
                 </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-3 max-h-80 overflow-y-auto">
-              {recommendedJobs.map((job) => (
-                <div
-                  key={job.id}
-                  className="flex items-start gap-3 p-3 rounded-lg border border-[#D1D9E6] hover:bg-[#F7F9FC] transition-colors cursor-pointer"
-                  onClick={() => navigate('seeker-jobs')}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
+              {data.recentJobs.length === 0 ? (
+                <div className="text-center py-8 text-[#5A6B7F] text-sm">No active jobs posted yet. Check back soon!</div>
+              ) : (
+                data.recentJobs.map((job) => (
+                  <div key={job.id} className="flex items-start gap-3 p-3 rounded-lg border border-[#D1D9E6] hover:bg-[#F7F9FC] transition-colors cursor-pointer"
+                    onClick={() => navigate('seeker-jobs')}>
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-[#0B1D33] leading-tight">{job.title}</p>
-                      <Badge
-                        className={`shrink-0 text-[10px] font-bold border-0 ${
-                          job.match >= 90
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : job.match >= 80
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-blue-100 text-blue-700'
-                        }`}
-                      >
-                        {job.match}% match
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-[#5A6B7F] mt-0.5">{job.employer}</p>
-                    <div className="flex flex-wrap items-center gap-3 mt-1.5">
-                      <span className="flex items-center gap-1 text-[11px] text-[#5A6B7F]">
-                        <MapPin className="w-3 h-3" /> {job.location}
-                      </span>
-                      <span className="text-[11px] text-[#5A6B7F] font-medium">{job.salary}</span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <Badge className="bg-[#F0F4F8] text-[#5A6B7F] hover:bg-[#F0F4F8] border-0 text-[10px]">
-                        {job.type}
-                      </Badge>
-                      <span className="text-[10px] text-[#5A6B7F]">{job.posted}</span>
+                      <div className="flex flex-wrap items-center gap-3 mt-1.5">
+                        {job.location && (
+                          <span className="flex items-center gap-1 text-[11px] text-[#5A6B7F]">
+                            <MapPin className="w-3 h-3" /> {job.location}
+                          </span>
+                        )}
+                        {(job.salary_min > 0 || job.salary_max > 0) && (
+                          <span className="text-[11px] text-[#5A6B7F] font-medium">
+                            {job.salary_min > 0 ? `£${job.salary_min.toLocaleString()}` : ''}{job.salary_min > 0 && job.salary_max > 0 ? ' - ' : ''}{job.salary_max > 0 ? `£${job.salary_max.toLocaleString()}` : ''}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        {job.job_type && (
+                          <Badge className="bg-[#F0F4F8] text-[#5A6B7F] hover:bg-[#F0F4F8] border-0 text-[10px] capitalize">{job.job_type}</Badge>
+                        )}
+                        <span className="text-[10px] text-[#5A6B7F]">
+                          {new Date(job.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </CardContent>
           </Card>
         </motion.div>
       </div>
 
-      {/* Recent Activity */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.4 }}
-      >
+      {/* Quick Activity */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.4 }}>
         <Card className="border-[#D1D9E6]">
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-semibold text-[#0B1D33] flex items-center gap-2">
-              <Clock className="w-4 h-4 text-[#C4942A]" />
-              Recent Activity
+              <Zap className="w-4 h-4 text-[#C4942A]" /> Quick Actions
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="relative">
-              {recentActivity.map((item, i) => {
-                const Icon = item.icon
-                return (
-                  <div key={item.id} className="flex gap-3 pb-4 last:pb-0">
-                    <div className="flex flex-col items-center">
-                      <div className="w-8 h-8 rounded-full bg-[#F0F4F8] flex items-center justify-center shrink-0">
-                        <Icon className={`w-4 h-4 ${item.iconColor}`} />
-                      </div>
-                      {i < recentActivity.length - 1 && (
-                        <div className="w-px flex-1 bg-[#D1D9E6] mt-1" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0 pt-0.5">
-                      <p className="text-sm text-[#0B1D33]">{item.text}</p>
-                      <p className="text-xs text-[#5A6B7F] mt-0.5">{item.time}</p>
-                    </div>
-                  </div>
-                )
-              })}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Button variant="outline" className="border-[#D1D9E6] text-[#0B1D33] hover:bg-[#F7F9FC]" onClick={() => navigate('seeker-jobs')}>
+                <Briefcase className="w-4 h-4 mr-2" /> Browse Jobs
+              </Button>
+              <Button variant="outline" className="border-[#D1D9E6] text-[#0B1D33] hover:bg-[#F7F9FC]" onClick={() => navigate('seeker-applications')}>
+                <FileText className="w-4 h-4 mr-2" /> My Applications
+              </Button>
+              <Button variant="outline" className="border-[#D1D9E6] text-[#0B1D33] hover:bg-[#F7F9FC]" onClick={() => navigate('seeker-cv')}>
+                <Award className="w-4 h-4 mr-2" /> Upload CV
+              </Button>
+              <Button variant="outline" className="border-[#D1D9E6] text-[#0B1D33] hover:bg-[#F7F9FC]" onClick={() => navigate('seeker-profile')}>
+                <UserCheck className="w-4 h-4 mr-2" /> Edit Profile
+              </Button>
             </div>
           </CardContent>
         </Card>

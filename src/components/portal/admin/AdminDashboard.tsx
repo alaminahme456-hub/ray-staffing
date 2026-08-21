@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   Users, UserCheck, Briefcase, Building2, FileText,
@@ -11,56 +12,30 @@ import { Button } from '@/components/ui/button'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, LineChart, Line
-} from 'recharts'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
+import { createClient } from '@/lib/supabase/client'
 
-const metrics = [
-  { label: 'Total Users', value: 247, icon: Users, trend: '+12%', trendUp: true, color: 'text-[#1A3A5C]' },
-  { label: 'Active Customers', value: 89, icon: UserCheck, trend: '+5%', trendUp: true, color: 'text-[#C4942A]' },
-  { label: 'Active Job Seekers', value: 156, icon: Briefcase, trend: '+8%', trendUp: true, color: 'text-[#1A3A5C]' },
-  { label: 'Employers', value: 42, icon: Building2, trend: '+3%', trendUp: true, color: 'text-[#C4942A]' },
-  { label: 'Open Jobs', value: 28, icon: FileText, trend: '-2%', trendUp: false, color: 'text-[#1A3A5C]' },
-  { label: 'Applications', value: 342, icon: ClipboardList, trend: '+15%', trendUp: true, color: 'text-[#C4942A]' },
-  { label: 'Housing Cases', value: 67, icon: Home, trend: '+4%', trendUp: true, color: 'text-[#1A3A5C]' },
-  { label: 'Pending Requests', value: 23, icon: AlertCircle, trend: '-8%', trendUp: true, color: 'text-red-500' },
-]
+interface MetricData {
+  totalUsers: number
+  activeCustomers: number
+  activeSeekers: number
+  employers: number
+  openJobs: number
+  applications: number
+  housingCases: number
+  pendingRequests: number
+}
 
-const recruitmentData = [
-  { month: 'Jan', newJobs: 5, applications: 42 },
-  { month: 'Feb', newJobs: 8, applications: 56 },
-  { month: 'Mar', newJobs: 6, applications: 48 },
-  { month: 'Apr', newJobs: 10, applications: 72 },
-  { month: 'May', newJobs: 7, applications: 61 },
-  { month: 'Jun', newJobs: 12, applications: 63 },
-]
-
-const housingData = [
-  { month: 'Jan', newCases: 8, resolved: 5 },
-  { month: 'Feb', newCases: 10, resolved: 7 },
-  { month: 'Mar', newCases: 12, resolved: 9 },
-  { month: 'Apr', newCases: 9, resolved: 11 },
-  { month: 'May', newCases: 14, resolved: 10 },
-  { month: 'Jun', newCases: 11, resolved: 13 },
-]
-
-const userGrowthData = [
-  { month: 'Jan', users: 165 },
-  { month: 'Feb', users: 178 },
-  { month: 'Mar', users: 192 },
-  { month: 'Apr', users: 210 },
-  { month: 'May', users: 228 },
-  { month: 'Jun', users: 247 },
-]
-
-const auditLog = [
-  { admin: 'Sarah Mitchell', action: 'Updated user role', entity: 'john.doe@email.com', time: '2 minutes ago' },
-  { admin: 'James Carter', action: 'Approved housing application', entity: 'HSG-2024-089', time: '15 minutes ago' },
-  { admin: 'Sarah Mitchell', action: 'Created new job posting', entity: 'Senior Care Nurse', time: '1 hour ago' },
-  { admin: 'David Chen', action: 'Exported compliance report', entity: 'Q2 2024 Report', time: '2 hours ago' },
-  { admin: 'James Carter', action: 'Deactivated user account', entity: 'mike.wilson@email.com', time: '3 hours ago' },
+const metricConfig = [
+  { key: 'totalUsers' as const, label: 'Total Users', icon: Users, color: 'text-[#1A3A5C]' },
+  { key: 'activeSeekers' as const, label: 'Active Job Seekers', icon: Briefcase, color: 'text-[#1A3A5C]' },
+  { key: 'employers' as const, label: 'Employers', icon: Building2, color: 'text-[#C4942A]' },
+  { key: 'activeCustomers' as const, label: 'Active Customers', icon: UserCheck, color: 'text-[#C4942A]' },
+  { key: 'openJobs' as const, label: 'Open Jobs', icon: FileText, color: 'text-[#1A3A5C]' },
+  { key: 'applications' as const, label: 'Applications', icon: ClipboardList, color: 'text-[#C4942A]' },
+  { key: 'housingCases' as const, label: 'Housing Cases', icon: Home, color: 'text-[#1A3A5C]' },
+  { key: 'pendingRequests' as const, label: 'Pending Requests', icon: AlertCircle, color: 'text-red-500' },
 ]
 
 const quickLinks = [
@@ -80,8 +55,72 @@ const cardVariants = {
   })
 }
 
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6">
+      <Skeleton className="h-8 w-64 rounded-xl" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} className="h-28 rounded-xl" />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Skeleton className="h-64 rounded-xl lg:col-span-2" />
+        <Skeleton className="h-64 rounded-xl" />
+      </div>
+    </div>
+  )
+}
+
 export default function AdminDashboard() {
   const navigate = useAppStore((s) => s.navigate)
+  const [metrics, setMetrics] = useState<MetricData | null>(null)
+  const [recentUsers, setRecentUsers] = useState<{ email: string; role: string; created_at: string }[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchData() {
+      const supabase = createClient()
+      try {
+        const [usersRes, jobsRes, applicationsRes, housingRes] = await Promise.all([
+          supabase.from('profiles').select('role, created_at, is_active'),
+          supabase.from('jobs').select('status'),
+          supabase.from('applications').select('status, created_at'),
+          supabase.from('housing_requests').select('status'),
+        ])
+
+        const users = usersRes.data || []
+        const jobs = jobsRes.data || []
+        const applications = applicationsRes.data || []
+        const housing = housingRes.data || []
+
+        setMetrics({
+          totalUsers: users.length,
+          activeCustomers: users.filter(u => u.role === 'customer' && u.is_active).length,
+          activeSeekers: users.filter(u => u.role === 'candidate' && u.is_active).length,
+          employers: users.filter(u => u.role === 'employer').length,
+          openJobs: jobs.filter(j => j.status === 'active').length,
+          applications: applications.length,
+          housingCases: housing.length,
+          pendingRequests: housing.filter(h => h.status === 'pending').length,
+        })
+
+        setRecentUsers(
+          users
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .slice(0, 5)
+            .map(u => ({ email: u.role, role: u.role, created_at: u.created_at }))
+        )
+      } catch (err) {
+        console.error('Failed to fetch admin metrics:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
+
+  if (loading || !metrics) return <DashboardSkeleton />
 
   return (
     <div className="space-y-6">
@@ -99,11 +138,12 @@ export default function AdminDashboard() {
 
       {/* Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {metrics.map((m, i) => {
+        {metricConfig.map((m, i) => {
           const Icon = m.icon
+          const value = metrics[m.key]
           return (
             <motion.div
-              key={m.label}
+              key={m.key}
               custom={i}
               variants={cardVariants}
               initial="hidden"
@@ -114,22 +154,11 @@ export default function AdminDashboard() {
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-sm text-[#5A6B7F]">{m.label}</p>
-                      <p className="text-2xl font-bold text-[#0B1D33] mt-1">{m.value}</p>
+                      <p className="text-2xl font-bold text-[#0B1D33] mt-1">{value}</p>
                     </div>
                     <div className="p-2 rounded-lg bg-[#F0F4F8]">
                       <Icon className={`h-5 w-5 ${m.color}`} />
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1 mt-2">
-                    {m.trendUp ? (
-                      <TrendingUp className="h-3 w-3 text-green-500" />
-                    ) : (
-                      <TrendingDown className="h-3 w-3 text-red-500" />
-                    )}
-                    <span className={`text-xs ${m.trendUp ? 'text-green-600' : 'text-red-500'}`}>
-                      {m.trend}
-                    </span>
-                    <span className="text-xs text-[#5A6B7F]">vs last month</span>
                   </div>
                 </CardContent>
               </Card>
@@ -138,134 +167,49 @@ export default function AdminDashboard() {
         })}
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recruitment Activity */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base font-semibold text-[#0B1D33]">Recruitment Activity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={recruitmentData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#D1D9E6" />
-                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#5A6B7F' }} />
-                  <YAxis tick={{ fontSize: 12, fill: '#5A6B7F' }} />
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: '8px',
-                      border: '1px solid #D1D9E6',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
-                    }}
-                  />
-                  <Bar dataKey="newJobs" name="New Jobs" fill="#1A3A5C" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="applications" name="Applications" fill="#C4942A" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Housing Activity */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base font-semibold text-[#0B1D33]">Housing Activity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={housingData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#D1D9E6" />
-                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#5A6B7F' }} />
-                  <YAxis tick={{ fontSize: 12, fill: '#5A6B7F' }} />
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: '8px',
-                      border: '1px solid #D1D9E6',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
-                    }}
-                  />
-                  <Bar dataKey="newCases" name="New Cases" fill="#0B1D33" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="resolved" name="Resolved" fill="#C4942A" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* User Growth */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="lg:col-span-2">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base font-semibold text-[#0B1D33]">User Growth</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={userGrowthData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#D1D9E6" />
-                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#5A6B7F' }} />
-                  <YAxis tick={{ fontSize: 12, fill: '#5A6B7F' }} />
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: '8px',
-                      border: '1px solid #D1D9E6',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="users"
-                    name="Total Users"
-                    stroke="#1A3A5C"
-                    strokeWidth={3}
-                    dot={{ fill: '#1A3A5C', r: 5 }}
-                    activeDot={{ r: 7 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
-
-      {/* Audit Log & Quick Links */}
+      {/* Recent Users & Quick Links */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Audit Log */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }} className="lg:col-span-2">
+        {/* Recent Users Table */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="lg:col-span-2">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base font-semibold text-[#0B1D33]">Recent Audit Log</CardTitle>
+              <CardTitle className="text-base font-semibold text-[#0B1D33]">Recent Users</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-[#D1D9E6]">
-                      <TableHead className="text-[#5A6B7F]">Admin</TableHead>
-                      <TableHead className="text-[#5A6B7F]">Action</TableHead>
-                      <TableHead className="text-[#5A6B7F]">Entity</TableHead>
-                      <TableHead className="text-[#5A6B7F]">Timestamp</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {auditLog.map((log, i) => (
-                      <TableRow key={i} className="border-[#D1D9E6]">
-                        <TableCell className="font-medium text-[#0B1D33]">{log.admin}</TableCell>
-                        <TableCell className="text-[#5A6B7F]">{log.action}</TableCell>
-                        <TableCell className="text-[#C4942A] font-medium">{log.entity}</TableCell>
-                        <TableCell className="text-[#5A6B7F] text-sm">{log.time}</TableCell>
+              {recentUsers.length === 0 ? (
+                <div className="text-center py-8 text-[#5A6B7F] text-sm">No users yet. Users will appear here once they sign up.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-[#D1D9E6]">
+                        <TableHead className="text-[#5A6B7F]">Role</TableHead>
+                        <TableHead className="text-[#5A6B7F]">Status</TableHead>
+                        <TableHead className="text-[#5A6B7F]">Joined</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {recentUsers.map((u, i) => (
+                        <TableRow key={i} className="border-[#D1D9E6]">
+                          <TableCell className="font-medium text-[#0B1D33] capitalize">{u.role.replace('_', ' ')}</TableCell>
+                          <TableCell>
+                            <span className="bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded-full">Active</span>
+                          </TableCell>
+                          <TableCell className="text-[#5A6B7F] text-sm">
+                            {new Date(u.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
 
         {/* Quick Links */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base font-semibold text-[#0B1D33]">Quick Links</CardTitle>
