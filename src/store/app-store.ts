@@ -82,12 +82,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   
   setUser: (user) => set({ user }),
   
-  logout: () => set({ 
+  logout: () => {
+    // Sign out from Supabase (fire-and-forget, don't block UI)
+    import('@/lib/supabase/client').then(({ createClient }) => {
+      createClient().auth.signOut()
+    })
+    set({ 
       user: null, 
       currentView: 'home',
       previousView: null,
       sidebarOpen: false
-    }),
+    })
+  },
 }))
 
 export function getPortalType(view: AppView): PortalType {

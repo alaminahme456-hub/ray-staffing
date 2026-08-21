@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { motion } from 'framer-motion'
 import { LogIn, UserPlus, Building2, Briefcase, ArrowLeft, Eye, EyeOff, CheckCircle2 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 export function LoginPage() {
   const { navigate, setUser } = useAppStore()
@@ -21,38 +22,45 @@ export function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
- setLoading(true)
+    setLoading(true)
     setError('')
 
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+      const supabase = createClient()
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.toLowerCase().trim(),
+        password,
       })
-      const data = await res.json()
-      if (!res.ok) { setError(data.error || 'Invalid credentials'); return }
 
-      setUser({ id: data.user.id, email: data.user.email, name: data.user.name || '', role: data.user.role })
-      const role = data.user.role
-      if (role === 'SUPER_ADMIN' || role === 'HOUSING_ADMIN' || role === 'RECRUITMENT_ADMIN' || role === 'HR_ADMIN' || role === 'LOCAL_ADMIN' || role === 'SUPPORT_STAFF') navigate('admin-dashboard')
-      else if (role === 'customer') navigate('customer-dashboard')
-      else if (role === 'candidate') navigate('seeker-dashboard')
-      else if (role === 'employer') navigate('employer-dashboard')
-      else navigate('home')
+      if (authError) {
+        setError(authError.message === 'Invalid login credentials'
+          ? 'Invalid email or password'
+          : authError.message)
+        return
+      }
+
+      if (data.user) {
+        const role = data.user.user_metadata?.role || 'candidate'
+        const user = {
+          id: data.user.id,
+          email: data.user.email || '',
+          name: data.user.user_metadata?.name || data.user.email || '',
+          role,
+        }
+        setUser(user)
+
+        if (['SUPER_ADMIN','HOUSING_ADMIN','RECRUITMENT_ADMIN','HR_ADMIN','LOCAL_ADMIN','SUPPORT_STAFF'].includes(role)) navigate('admin-dashboard')
+        else if (role === 'customer') navigate('customer-dashboard')
+        else if (role === 'candidate') navigate('seeker-dashboard')
+        else if (role === 'employer') navigate('employer-dashboard')
+        else navigate('home')
+      }
     } catch {
       setError('Something went wrong. Please try again.')
     } finally {
       setLoading(false)
     }
   }
-
-  const quickLogins = [
-    { label: 'Admin', email: 'admin@raystaffing.co.uk', desc: 'Full access' },
-    { label: 'Customer', email: 'tenant@raystaffing.co.uk', desc: 'Housing tenant' },
-    { label: 'Job Seeker', email: 'nurse@raystaffing.co.uk', desc: 'Candidate portal' },
-    { label: 'Employer', email: 'nhs-trust@raystaffing.co.uk', desc: 'Recruitment portal' },
-  ]
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-[#F7F9FC] py-12 px-4">
@@ -89,19 +97,6 @@ export function LoginPage() {
                 {loading ? 'Signing in...' : 'Sign In'}
               </Button>
             </form>
-
-            {/* Demo Quick Login */}
-            <div className="mt-6 pt-6 border-t border-[#D1D9E6]">
-              <p className="text-xs font-medium text-[#5A6B7F] text-center mb-3">DEMO ACCOUNTS (password: demo1234)</p>
-              <div className="grid grid-cols-2 gap-2">
-                {quickLogins.map(ql => (
-                  <button key={ql.email} onClick={() => { setEmail(ql.email); setPassword('demo1234') }} className="flex flex-col items-start rounded-lg border border-[#D1D9E6] p-2.5 text-left hover:bg-[#F0F4F8] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C4942A]">
-                    <span className="text-xs font-semibold text-[#0B1D33]">{ql.label}</span>
-                    <span className="text-[10px] text-[#5A6B7F] truncate w-full">{ql.email}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
           </CardContent>
         </Card>
       </motion.div>
@@ -122,17 +117,41 @@ export function RegisterPage() {
     setLoading(true); setError('')
 
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: form.name, email: form.email, password: form.password, phone: form.phone, role: form.accountType === 'employer' ? 'employer' : form.accountType === 'customer' ? 'customer' : 'candidate' }),
+      const supabase = createClient()
+      const roleMap = { candidate: 'candidate', employer: 'employer', customer: 'customer' }
+
+      const { data, error: authError } = await supabase.auth.signUp({
+        email: form.email.toLowerCase().trim(),
+        password: form.password,
+        options: {
+          data: {
+            name: form.name,
+            phone: form.phone,
+            role: roleMap[form.accountType],
+          },
+        },
       })
-      const data = await res.json()
-      if (!res.ok) { setError(data.error || 'Registration failed'); return }
-      setUser({ id: data.user.id, email: data.user.email, name: data.user.name || '', role: data.user.role })
-      if (form.accountType === 'candidate') navigate('seeker-dashboard')
-      else if (form.accountType === 'employer') navigate('employer-dashboard')
-      else navigate('customer-dashboard')
+
+      if (authError) {
+        if (authError.message.includes('already registered')) setError('An account with this email already exists')
+        else setError(authError.message)
+        return
+      }
+
+      if (data.user) {
+        const role = roleMap[form.accountType]
+        const user = {
+          id: data.user.id,
+          email: data.user.email || '',
+          name: form.name,
+          role,
+        }
+        setUser(user)
+
+        if (form.accountType === 'candidate') navigate('seeker-dashboard')
+        else if (form.accountType === 'employer') navigate('employer-dashboard')
+        else navigate('customer-dashboard')
+      }
     } catch {
       setError('Something went wrong')
     } finally { setLoading(false) }
@@ -199,7 +218,7 @@ export function RegisterPage() {
 }
 
 export function RegisterEmployerPage() {
-  const { navigate } = useAppStore()
+  const { navigate, setUser } = useAppStore()
   const [form, setForm] = useState({ companyName: '', email: '', name: '', password: '', phone: '', industry: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -207,11 +226,23 @@ export function RegisterEmployerPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true); setError('')
     try {
-      const res = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.name, email: form.email, password: form.password, phone: form.phone, role: 'employer' }) })
-      if (!res.ok) { const d = await res.json(); setError(d.error || 'Registration failed'); return }
-      const data = await res.json()
-      useAppStore.getState().setUser({ id: data.user.id, email: data.user.email, name: data.user.name, role: 'employer' })
-      navigate('employer-dashboard')
+      const supabase = createClient()
+      const { data, error: authError } = await supabase.auth.signUp({
+        email: form.email.toLowerCase().trim(),
+        password: form.password,
+        options: {
+          data: { name: form.name, phone: form.phone, role: 'employer', companyName: form.companyName, industry: form.industry },
+        },
+      })
+      if (authError) {
+        if (authError.message.includes('already registered')) setError('An account with this email already exists')
+        else setError(authError.message)
+        return
+      }
+      if (data.user) {
+        setUser({ id: data.user.id, email: data.user.email || '', name: form.name, role: 'employer' })
+        navigate('employer-dashboard')
+      }
     } catch { setError('Something went wrong') } finally { setLoading(false) }
   }
 
@@ -248,7 +279,7 @@ export function RegisterEmployerPage() {
 }
 
 export function RegisterCandidatePage() {
-  const { navigate } = useAppStore()
+  const { navigate, setUser } = useAppStore()
   const [form, setForm] = useState({ name: '', email: '', password: '', phone: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -256,11 +287,23 @@ export function RegisterCandidatePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true); setError('')
     try {
-      const res = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.name, email: form.email, password: form.password, phone: form.phone, role: 'candidate' }) })
-      if (!res.ok) { const d = await res.json(); setError(d.error || 'Registration failed'); return }
-      const data = await res.json()
-      useAppStore.getState().setUser({ id: data.user.id, email: data.user.email, name: data.user.name, role: 'candidate' })
-      navigate('seeker-dashboard')
+      const supabase = createClient()
+      const { data, error: authError } = await supabase.auth.signUp({
+        email: form.email.toLowerCase().trim(),
+        password: form.password,
+        options: {
+          data: { name: form.name, phone: form.phone, role: 'candidate' },
+        },
+      })
+      if (authError) {
+        if (authError.message.includes('already registered')) setError('An account with this email already exists')
+        else setError(authError.message)
+        return
+      }
+      if (data.user) {
+        setUser({ id: data.user.id, email: data.user.email || '', name: form.name, role: 'candidate' })
+        navigate('seeker-dashboard')
+      }
     } catch { setError('Something went wrong') } finally { setLoading(false) }
   }
 
