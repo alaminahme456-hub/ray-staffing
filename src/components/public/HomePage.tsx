@@ -28,12 +28,12 @@ export default function HomePage() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_40%,rgba(196,148,42,0.07),transparent_55%)]" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-0 w-full">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-center min-h-[85vh] lg:min-h-[88vh]">
-            {/* ── Mobile: 3D first (order-1), Desktop: 3D second (order-2) ── */}
+            {/* ── Desktop only: Video (hidden on mobile) ── */}
             <motion.div
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.6, delay: 0.2, ease: 'easeOut' }}
-              className="order-1 lg:order-2 h-[260px] sm:h-[340px] lg:h-[520px] xl:h-[580px] rounded-2xl overflow-hidden border border-white/[0.06] shadow-2xl shadow-black/30"
+              className="hidden lg:block h-[520px] xl:h-[580px] rounded-2xl overflow-hidden border border-white/[0.06] shadow-2xl shadow-black/30"
               aria-hidden="true"
             >
               <video
@@ -47,12 +47,12 @@ export default function HomePage() {
               </video>
             </motion.div>
 
-            {/* ── Mobile: Text second (order-2), Desktop: Text first (order-1) ── */}
+            {/* ── Text content (full width on mobile, left on desktop) ── */}
             <motion.div
               initial="hidden"
               animate="visible"
               variants={staggerContainer}
-              className="order-2 lg:order-1 max-w-xl"
+              className="max-w-xl"
             >
 
 
