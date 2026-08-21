@@ -3,8 +3,9 @@
 import { Suspense, use, useMemo, useState, useCallback, startTransition } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Search, Eye, Edit, Trash2, MoreHorizontal, MapPin, Users, Skeleton,
+  Search, Eye, Edit, Trash2, MoreHorizontal, MapPin, Users,
 } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
