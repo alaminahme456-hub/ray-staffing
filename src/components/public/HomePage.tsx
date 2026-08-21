@@ -58,7 +58,7 @@ export default function HomePage() {
                   <ArrowRight className="ml-2 size-4" />
                 </Button>
                 <Button
-                  onClick={() => navigate('contact')}
+                  onClick={() => navigate('login')}
                   size="lg"
                   className="bg-[#153A22] hover:bg-[#1a4529] text-[#FAF8F5] font-semibold px-7 h-12 text-base border border-[#C4942A]/30"
                 >
