@@ -63,9 +63,7 @@ export function LoginPage() {
 
         <Card className="border-[#D1D9E6] shadow-lg">
           <CardHeader className="text-center pb-4">
-            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-[#0B1D33]">
-              <span className="text-2xl font-bold text-[#C4942A]">R</span>
-            </div>
+            <img src="/images/logo.jpg" alt="RAY" className="mx-auto mb-3 h-14 w-14 rounded-xl object-cover" />
             <CardTitle className="text-xl text-[#0B1D33]">Sign in to RAY</CardTitle>
             <CardDescription>Access your RAY Staffing portal</CardDescription>
           </CardHeader>
@@ -148,9 +146,7 @@ export function RegisterPage() {
         </button>
         <Card className="border-[#D1D9E6] shadow-lg">
           <CardHeader className="text-center pb-4">
-            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-[#0B1D33]">
-              <span className="text-2xl font-bold text-[#C4942A]">R</span>
-            </div>
+            <img src="/images/logo.jpg" alt="RAY" className="mx-auto mb-3 h-14 w-14 rounded-xl object-cover" />
             <CardTitle className="text-xl text-[#0B1D33]">Create your RAY account</CardTitle>
             <CardDescription>Join RAY Staffing Consulting</CardDescription>
           </CardHeader>
@@ -225,7 +221,7 @@ export function RegisterEmployerPage() {
         <button onClick={() => navigate('employers')} className="flex items-center gap-1.5 text-sm text-[#5A6B7F] hover:text-[#0B1D33] mb-6"><ArrowLeft className="h-4 w-4" /> Back</button>
         <Card className="border-[#D1D9E6] shadow-lg">
           <CardHeader className="text-center pb-4">
-            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-[#0B1D33]"><span className="text-2xl font-bold text-[#C4942A]">R</span></div>
+            <img src="/images/logo.jpg" alt="RAY" className="mx-auto mb-3 h-14 w-14 rounded-xl object-cover" />
             <CardTitle className="text-xl">Create Employer Account</CardTitle>
             <CardDescription>Start finding exceptional talent with RAY</CardDescription>
           </CardHeader>
@@ -274,7 +270,7 @@ export function RegisterCandidatePage() {
         <button onClick={() => navigate('job-seekers')} className="flex items-center gap-1.5 text-sm text-[#5A6B7F] hover:text-[#0B1D33] mb-6"><ArrowLeft className="h-4 w-4" /> Back</button>
         <Card className="border-[#D1D9E6] shadow-lg">
           <CardHeader className="text-center pb-4">
-            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-[#0B1D33]"><span className="text-2xl font-bold text-[#C4942A]">R</span></div>
+            <img src="/images/logo.jpg" alt="RAY" className="mx-auto mb-3 h-14 w-14 rounded-xl object-cover" />
             <CardTitle className="text-xl">Create Job Seeker Profile</CardTitle>
             <CardDescription>Find your next opportunity with RAY</CardDescription>
           </CardHeader>

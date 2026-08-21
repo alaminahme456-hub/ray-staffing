@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   keywords: ["RAY Staffing", "housing services UK", "HR consultancy", "recruitment UK", "healthcare staffing", "NHS recruitment", "UK employment law"],
   authors: [{ name: "RAY Staffing Consulting Ltd" }],
   icons: {
-    icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230B1D33'/><text x='50' y='68' font-size='55' font-weight='bold' text-anchor='middle' fill='%23C4942A'>R</text></svg>",
+    icon: "/images/logo.jpg",
   },
   openGraph: {
     title: "RAY Staffing Consulting Ltd",

@@ -143,9 +143,7 @@ export function PortalSidebar() {
             else if (portalType === 'seeker') navigate('seeker-dashboard')
             else if (portalType === 'employer') navigate('employer-dashboard')
           }} className="flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C4942A] rounded-sm">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#C4942A]">
-              <span className="text-sm font-bold text-white">R</span>
-            </div>
+            <img src="/images/logo.jpg" alt="RAY" className="h-9 w-9 rounded-lg object-cover" />
             <div className="flex flex-col">
               <span className={cn('text-sm font-bold leading-none', textColor)}>{navConfig.title.split(' ').slice(0, 2).join(' ')}</span>
               <span className={cn('text-[9px] font-medium tracking-wider uppercase leading-none mt-0.5', mutedColor)}>{navConfig.subtitle}</span>
@@ -224,9 +222,7 @@ export function PortalTopBar() {
         <Menu className="h-5 w-5" />
       </Button>
       <div className="flex items-center gap-2">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#C4942A]">
-          <span className="text-xs font-bold text-white">R</span>
-        </div>
+        <img src="/images/logo.jpg" alt="RAY" className="h-7 w-7 rounded-md object-cover" />
         <span className="text-sm font-semibold">{navConfig.subtitle}</span>
       </div>
       <div className="ml-auto flex items-center gap-2">

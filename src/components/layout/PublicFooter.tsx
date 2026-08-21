@@ -49,9 +49,7 @@ export function PublicFooter() {
           {/* Brand Column */}
           <div className="col-span-2 md:col-span-4 lg:col-span-1 mb-4 lg:mb-0">
             <div className="flex items-center gap-2.5 mb-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#C4942A]/12 border border-[#C4942A]/20">
-                <span className="text-lg font-bold text-[#C4942A]">R</span>
-              </div>
+              <img src="/images/logo.jpg" alt="RAY" className="h-10 w-10 rounded-lg object-cover" />
               <div className="flex flex-col">
                 <span className="text-lg font-bold tracking-tight text-[#FAF8F5] leading-none">RAY</span>
                 <span className="text-[10px] font-medium tracking-widest text-[#8A9B8E] uppercase leading-none mt-0.5">Staffing Consulting Ltd</span>

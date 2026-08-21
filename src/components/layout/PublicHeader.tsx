@@ -52,9 +52,7 @@ export function PublicHeader() {
         <div className="flex h-16 items-center justify-between lg:h-[68px]">
           {/* Logo */}
           <button onClick={() => handleNav('home')} className="flex items-center gap-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C4942A] rounded-sm">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#C4942A]/15 border border-[#C4942A]/25">
-              <span className="text-base font-bold text-[#C4942A]">R</span>
-            </div>
+            <img src="/images/logo.jpg" alt="RAY" className="h-9 w-9 rounded-lg object-cover" />
             <div className="flex flex-col">
               <span className="text-lg font-bold tracking-tight text-[#FAF8F5] leading-none">RAY</span>
               <span className="text-[9px] font-medium tracking-[0.15em] text-[#8A9B8E] uppercase leading-none mt-0.5">Staffing Consulting</span>
@@ -146,9 +144,7 @@ export function PublicHeader() {
               <div className="flex flex-col h-full">
                 <div className="flex items-center justify-between p-4 border-b border-white/8">
                   <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#C4942A]/15">
-                      <span className="text-sm font-bold text-[#C4942A]">R</span>
-                    </div>
+                    <img src="/images/logo.jpg" alt="RAY" className="h-8 w-8 rounded-lg object-cover" />
                     <span className="font-bold text-[#FAF8F5]">RAY</span>
                   </div>
                 </div>
