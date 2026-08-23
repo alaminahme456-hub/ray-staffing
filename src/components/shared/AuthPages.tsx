@@ -10,7 +10,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { motion } from 'framer-motion'
 import { LogIn, UserPlus, Building2, Briefcase, ArrowLeft, Eye, EyeOff, CheckCircle2 } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
 
 export function LoginPage() {
   const { navigate, setUser } = useAppStore()
@@ -26,29 +25,21 @@ export function LoginPage() {
     setError('')
 
     try {
-      const supabase = createClient()
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email: email.toLowerCase().trim(),
-        password,
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
       })
+      const data = await res.json()
 
-      if (authError) {
-        setError(authError.message === 'Invalid login credentials'
-          ? 'Invalid email or password'
-          : authError.message)
+      if (!res.ok) {
+        setError(data.error || 'Login failed')
         return
       }
 
       if (data.user) {
-        const role = data.user.user_metadata?.role || 'candidate'
-        const user = {
-          id: data.user.id,
-          email: data.user.email || '',
-          name: data.user.user_metadata?.name || data.user.email || '',
-          role,
-        }
-        setUser(user)
-
+        setUser(data.user)
+        const role = data.user.role
         if (['SUPER_ADMIN','HOUSING_ADMIN','RECRUITMENT_ADMIN','HR_ADMIN','LOCAL_ADMIN','SUPPORT_STAFF'].includes(role)) navigate('admin-dashboard')
         else if (role === 'customer') navigate('customer-dashboard')
         else if (role === 'candidate') navigate('seeker-dashboard')
@@ -117,37 +108,23 @@ export function RegisterPage() {
     setLoading(true); setError('')
 
     try {
-      const supabase = createClient()
       const roleMap = { candidate: 'candidate', employer: 'employer', customer: 'customer' }
 
-      const { data, error: authError } = await supabase.auth.signUp({
-        email: form.email.toLowerCase().trim(),
-        password: form.password,
-        options: {
-          data: {
-            name: form.name,
-            phone: form.phone,
-            role: roleMap[form.accountType],
-          },
-        },
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: form.name, email: form.email, password: form.password, phone: form.phone, role: roleMap[form.accountType] }),
       })
+      const data = await res.json()
 
-      if (authError) {
-        if (authError.message.includes('already registered')) setError('An account with this email already exists')
-        else setError(authError.message)
+      if (!res.ok) {
+        if (data.error?.includes('already exists')) setError('An account with this email already exists')
+        else setError(data.error || 'Registration failed')
         return
       }
 
       if (data.user) {
-        const role = roleMap[form.accountType]
-        const user = {
-          id: data.user.id,
-          email: data.user.email || '',
-          name: form.name,
-          role,
-        }
-        setUser(user)
-
+        setUser(data.user)
         if (form.accountType === 'candidate') navigate('seeker-dashboard')
         else if (form.accountType === 'employer') navigate('employer-dashboard')
         else navigate('customer-dashboard')
@@ -226,21 +203,19 @@ export function RegisterEmployerPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true); setError('')
     try {
-      const supabase = createClient()
-      const { data, error: authError } = await supabase.auth.signUp({
-        email: form.email.toLowerCase().trim(),
-        password: form.password,
-        options: {
-          data: { name: form.name, phone: form.phone, role: 'employer', companyName: form.companyName, industry: form.industry },
-        },
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: form.name, email: form.email, password: form.password, phone: form.phone, role: 'employer' }),
       })
-      if (authError) {
-        if (authError.message.includes('already registered')) setError('An account with this email already exists')
-        else setError(authError.message)
+      const data = await res.json()
+      if (!res.ok) {
+        if (data.error?.includes('already exists')) setError('An account with this email already exists')
+        else setError(data.error || 'Registration failed')
         return
       }
       if (data.user) {
-        setUser({ id: data.user.id, email: data.user.email || '', name: form.name, role: 'employer' })
+        setUser(data.user)
         navigate('employer-dashboard')
       }
     } catch { setError('Something went wrong') } finally { setLoading(false) }
@@ -287,21 +262,19 @@ export function RegisterCandidatePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true); setError('')
     try {
-      const supabase = createClient()
-      const { data, error: authError } = await supabase.auth.signUp({
-        email: form.email.toLowerCase().trim(),
-        password: form.password,
-        options: {
-          data: { name: form.name, phone: form.phone, role: 'candidate' },
-        },
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: form.name, email: form.email, password: form.password, phone: form.phone, role: 'candidate' }),
       })
-      if (authError) {
-        if (authError.message.includes('already registered')) setError('An account with this email already exists')
-        else setError(authError.message)
+      const data = await res.json()
+      if (!res.ok) {
+        if (data.error?.includes('already exists')) setError('An account with this email already exists')
+        else setError(data.error || 'Registration failed')
         return
       }
       if (data.user) {
-        setUser({ id: data.user.id, email: data.user.email || '', name: form.name, role: 'candidate' })
+        setUser(data.user)
         navigate('seeker-dashboard')
       }
     } catch { setError('Something went wrong') } finally { setLoading(false) }
