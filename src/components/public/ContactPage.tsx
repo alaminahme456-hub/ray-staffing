@@ -24,6 +24,8 @@ const staggerContainer = {
 export default function ContactPage() {
   const navigate = useAppStore((s) => s.navigate)
   const [submitted, setSubmitted] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -32,10 +34,30 @@ export default function ContactPage() {
     message: '',
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // In production, this would POST to an API
-    setSubmitted(true)
+    setLoading(true)
+    setError('')
+
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to send message')
+        return
+      }
+
+      setSubmitted(true)
+    } catch {
+      setError('Something went wrong. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -92,6 +114,9 @@ export default function ContactPage() {
                       </div>
                     ) : (
                       <form onSubmit={handleSubmit} className="space-y-5">
+                        {error && (
+                          <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700">{error}</div>
+                        )}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                           <div className="space-y-2">
                             <Label htmlFor="name" className="text-sm font-medium text-[#0B1D33]">Full Name *</Label>
@@ -165,7 +190,7 @@ export default function ContactPage() {
                           className="bg-[#C4942A] hover:bg-[#B38523] text-white font-semibold px-8 h-11 w-full sm:w-auto"
                         >
                           <Send className="mr-2 size-4" />
-                          Send Message
+                          {loading ? 'Sending...' : 'Send Message'}
                         </Button>
                       </form>
                     )}
