@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { neonSignOut } from '@/lib/auth/neon-auth'
 
 export type AppView = 
   // Public pages
@@ -83,6 +84,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setUser: (user) => set({ user }),
   
   logout: () => {
+    neonSignOut().catch(() => {})
     set({
       user: null,
       currentView: 'home',

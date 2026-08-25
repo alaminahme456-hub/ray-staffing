@@ -1,20 +1,9 @@
 /**
- * Stub Supabase client — returns empty data for all queries.
- * Portal components import this; replacing with a no-op keeps UI intact.
+ * Data-only stub for portal components.
+ * Auth is handled by Neon Auth (see src/lib/auth/neon-auth.ts).
  */
-
-class SupabaseStub {
-  auth = {
-    getSession: () => Promise.resolve({ data: { session: null } }),
-    getUser: () => Promise.resolve({ data: { user: null } }),
-    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-    signInWithPassword: () =>
-      Promise.resolve({ data: { user: null }, error: { message: 'Use /api/auth/login' } }),
-    signUp: () =>
-      Promise.resolve({ data: { user: null }, error: { message: 'Use /api/auth/register' } }),
-    signOut: () => Promise.resolve(),
-  }
-
+class DataStub {
+  private empty = { data: null, error: null, count: 0 }
   from() { return this }
   select() { return this }
   insert() { return this }
@@ -38,14 +27,13 @@ class SupabaseStub {
   not() { return this }
   or() { return this }
   contains() { return this }
-  rpc() { return Promise.resolve({ data: null, error: null, count: 0 }) }
-
-  /** Make the stub awaitable — returns empty result */
+  rpc() { return Promise.resolve(this.empty) }
   then(resolve: (v: any) => void, _reject?: (v: any) => void) {
-    return Promise.resolve({ data: null, error: null, count: 0 }).then(resolve, _reject)
+    return Promise.resolve(this.empty).then(resolve, _reject)
   }
 }
-
+let _stub: DataStub | null = null
 export function createClient() {
-  return new SupabaseStub()
+  if (!_stub) _stub = new DataStub()
+  return _stub
 }

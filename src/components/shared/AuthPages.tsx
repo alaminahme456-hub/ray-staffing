@@ -5,11 +5,14 @@ import { useAppStore } from '@/store/app-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { motion } from 'framer-motion'
-import { LogIn, UserPlus, Building2, Briefcase, ArrowLeft, Eye, EyeOff, CheckCircle2 } from 'lucide-react'
+import { Building2, Briefcase, ArrowLeft, Eye, EyeOff, CheckCircle2, Loader2 } from 'lucide-react'
+import { neonSignIn, neonSignUp } from '@/lib/auth/neon-auth'
+
+const ADMIN_ROLES = ['SUPER_ADMIN','HOUSING_ADMIN','RECRUITMENT_ADMIN','HR_ADMIN','LOCAL_ADMIN','SUPPORT_STAFF']
 
 export function LoginPage() {
   const { navigate, setUser } = useAppStore()
@@ -20,37 +23,18 @@ export function LoginPage() {
   const [error, setError] = useState('')
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-
+    e.preventDefault(); setLoading(true); setError('')
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      })
-      const data = await res.json()
-
-      if (!res.ok) {
-        setError(data.error || 'Login failed')
-        return
-      }
-
-      if (data.user) {
-        setUser(data.user)
-        const role = data.user.role
-        if (['SUPER_ADMIN','HOUSING_ADMIN','RECRUITMENT_ADMIN','HR_ADMIN','LOCAL_ADMIN','SUPPORT_STAFF'].includes(role)) navigate('admin-dashboard')
-        else if (role === 'customer') navigate('customer-dashboard')
-        else if (role === 'candidate') navigate('seeker-dashboard')
-        else if (role === 'employer') navigate('employer-dashboard')
-        else navigate('home')
-      }
-    } catch {
-      setError('Something went wrong. Please try again.')
-    } finally {
-      setLoading(false)
-    }
+      const { user } = await neonSignIn({ email, password })
+      setUser({ id: user.id, email: user.email, name: user.name, role: user.role })
+      if (ADMIN_ROLES.includes(user.role)) navigate('admin-dashboard')
+      else if (user.role === 'customer') navigate('customer-dashboard')
+      else if (user.role === 'candidate') navigate('seeker-dashboard')
+      else if (user.role === 'employer') navigate('employer-dashboard')
+      else navigate('home')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+    } finally { setLoading(false) }
   }
 
   return (
@@ -59,7 +43,6 @@ export function LoginPage() {
         <button onClick={() => navigate('home')} className="flex items-center gap-1.5 text-sm text-[#5A6B7F] hover:text-[#0B1D33] mb-6 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C4942A] rounded-sm">
           <ArrowLeft className="h-4 w-4" /> Back to website
         </button>
-
         <Card className="border-[#D1D9E6] shadow-lg">
           <CardHeader className="text-center pb-4">
             <img src="/images/logo.jpg" alt="RAY" className="mx-auto mb-3 h-14 w-14 rounded-xl object-cover" />
@@ -68,24 +51,22 @@ export function LoginPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
-              {error && (
-                <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
-              )}
+              {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
               <div className="space-y-2">
                 <Label htmlFor="email">Email address</Label>
-                <Input id="email" type="email" placeholder="you@example.co.uk" value={email} onChange={e => setEmail(e.target.value)} required className="border-[#D1D9E6]" />
+                <Input id="email" type="email" placeholder="you@example.co.uk" value={email} onChange={e => setEmail(e.target.value)} required className="border-[#D1D9E6]" disabled={loading} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <div className="relative">
-                  <Input id="password" type={showPassword ? 'text' : 'password'} placeholder="Enter your password" value={password} onChange={e => setPassword(e.target.value)} required className="border-[#D1D9E6] pr-10" />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5A6B7F] hover:text-[#0B1D33]" aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                  <Input id="password" type={showPassword ? 'text' : 'password'} placeholder="Enter your password" value={password} onChange={e => setPassword(e.target.value)} required className="border-[#D1D9E6] pr-10" disabled={loading} />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5A6B7F] hover:text-[#0B1D33]" tabIndex={-1} aria-label={showPassword ? 'Hide password' : 'Show password'}>
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
               <Button type="submit" disabled={loading} className="w-full bg-[#0B1D33] hover:bg-[#1A3A5C] text-white h-11">
-                {loading ? 'Signing in...' : 'Sign In'}
+                {loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Signing in...</span> : 'Sign In'}
               </Button>
             </form>
           </CardContent>
@@ -106,31 +87,15 @@ export function RegisterPage() {
     if (form.password !== form.confirmPassword) { setError('Passwords do not match'); return }
     if (form.password.length < 8) { setError('Password must be at least 8 characters'); return }
     setLoading(true); setError('')
-
     try {
       const roleMap = { candidate: 'candidate', employer: 'employer', customer: 'customer' }
-
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: form.name, email: form.email, password: form.password, phone: form.phone, role: roleMap[form.accountType] }),
-      })
-      const data = await res.json()
-
-      if (!res.ok) {
-        if (data.error?.includes('already exists')) setError('An account with this email already exists')
-        else setError(data.error || 'Registration failed')
-        return
-      }
-
-      if (data.user) {
-        setUser(data.user)
-        if (form.accountType === 'candidate') navigate('seeker-dashboard')
-        else if (form.accountType === 'employer') navigate('employer-dashboard')
-        else navigate('customer-dashboard')
-      }
-    } catch {
-      setError('Something went wrong')
+      const { user } = await neonSignUp({ email: form.email, password: form.password, name: form.name, phone: form.phone, role: roleMap[form.accountType] })
+      setUser({ id: user.id, email: user.email, name: user.name, role: user.role })
+      if (form.accountType === 'candidate') navigate('seeker-dashboard')
+      else if (form.accountType === 'employer') navigate('employer-dashboard')
+      else navigate('customer-dashboard')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally { setLoading(false) }
   }
 
@@ -159,28 +124,13 @@ export function RegisterPage() {
                   </TabsList>
                 </Tabs>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="name">Full name</Label>
-                <Input id="name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="John Smith" required className="border-[#D1D9E6]" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="reg-email">Email address</Label>
-                <Input id="reg-email" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="you@example.co.uk" required className="border-[#D1D9E6]" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone number</Label>
-                <Input id="phone" type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="07700 900000" className="border-[#D1D9E6]" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="reg-password">Password</Label>
-                <Input id="reg-password" type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 8 characters" required className="border-[#D1D9E6]" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirm-password">Confirm password</Label>
-                <Input id="confirm-password" type="password" value={form.confirmPassword} onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder="Repeat password" required className="border-[#D1D9E6]" />
-              </div>
+              <div className="space-y-2"><Label htmlFor="name">Full name</Label><Input id="name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="John Smith" required className="border-[#D1D9E6]" disabled={loading} /></div>
+              <div className="space-y-2"><Label htmlFor="reg-email">Email address</Label><Input id="reg-email" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="you@example.co.uk" required className="border-[#D1D9E6]" disabled={loading} /></div>
+              <div className="space-y-2"><Label htmlFor="phone">Phone number</Label><Input id="phone" type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="07700 900000" className="border-[#D1D9E6]" disabled={loading} /></div>
+              <div className="space-y-2"><Label htmlFor="reg-password">Password</Label><Input id="reg-password" type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 8 characters" required className="border-[#D1D9E6]" disabled={loading} /></div>
+              <div className="space-y-2"><Label htmlFor="confirm-password">Confirm password</Label><Input id="confirm-password" type="password" value={form.confirmPassword} onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder="Repeat password" required className="border-[#D1D9E6]" disabled={loading} /></div>
               <Button type="submit" disabled={loading} className="w-full bg-[#C4942A] hover:bg-[#B38524] text-white h-11">
-                {loading ? 'Creating account...' : 'Create Account'}
+                {loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Creating account...</span> : 'Create Account'}
               </Button>
             </form>
             <p className="mt-4 text-center text-xs text-[#5A6B7F]">
@@ -203,22 +153,10 @@ export function RegisterEmployerPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true); setError('')
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: form.name, email: form.email, password: form.password, phone: form.phone, role: 'employer' }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        if (data.error?.includes('already exists')) setError('An account with this email already exists')
-        else setError(data.error || 'Registration failed')
-        return
-      }
-      if (data.user) {
-        setUser(data.user)
-        navigate('employer-dashboard')
-      }
-    } catch { setError('Something went wrong') } finally { setLoading(false) }
+      const { user } = await neonSignUp({ email: form.email, password: form.password, name: form.name, phone: form.phone, role: 'employer' })
+      setUser({ id: user.id, email: user.email, name: user.name, role: user.role })
+      navigate('employer-dashboard')
+    } catch (err) { setError(err instanceof Error ? err.message : 'Something went wrong') } finally { setLoading(false) }
   }
 
   return (
@@ -235,16 +173,18 @@ export function RegisterEmployerPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Company name</Label><Input value={form.companyName} onChange={e => setForm(f => ({ ...f, companyName: e.target.value }))} required className="border-[#D1D9E6]" /></div>
-                <div className="space-y-2"><Label>Industry</Label><Input value={form.industry} onChange={e => setForm(f => ({ ...f, industry: e.target.value }))} placeholder="e.g. Healthcare" className="border-[#D1D9E6]" /></div>
+                <div className="space-y-2"><Label>Company name</Label><Input value={form.companyName} onChange={e => setForm(f => ({ ...f, companyName: e.target.value }))} required className="border-[#D1D9E6]" disabled={loading} /></div>
+                <div className="space-y-2"><Label>Industry</Label><Input value={form.industry} onChange={e => setForm(f => ({ ...f, industry: e.target.value }))} placeholder="e.g. Healthcare" className="border-[#D1D9E6]" disabled={loading} /></div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Contact name</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required className="border-[#D1D9E6]" /></div>
-                <div className="space-y-2"><Label>Phone</Label><Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="border-[#D1D9E6]" /></div>
+                <div className="space-y-2"><Label>Contact name</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required className="border-[#D1D9E6]" disabled={loading} /></div>
+                <div className="space-y-2"><Label>Phone</Label><Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="border-[#D1D9E6]" disabled={loading} /></div>
               </div>
-              <div className="space-y-2"><Label>Email</Label><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required className="border-[#D1D9E6]" /></div>
-              <div className="space-y-2"><Label>Password</Label><Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required placeholder="Min. 8 characters" className="border-[#D1D9E6]" /></div>
-              <Button type="submit" disabled={loading} className="w-full bg-[#C4942A] hover:bg-[#B38524] text-white h-11">{loading ? 'Creating...' : 'Create Employer Account'}</Button>
+              <div className="space-y-2"><Label>Email</Label><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required className="border-[#D1D9E6]" disabled={loading} /></div>
+              <div className="space-y-2"><Label>Password</Label><Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required placeholder="Min. 8 characters" className="border-[#D1D9E6]" disabled={loading} /></div>
+              <Button type="submit" disabled={loading} className="w-full bg-[#C4942A] hover:bg-[#B38524] text-white h-11">
+                {loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Creating...</span> : 'Create Employer Account'}
+              </Button>
             </form>
           </CardContent>
         </Card>
@@ -262,22 +202,10 @@ export function RegisterCandidatePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true); setError('')
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: form.name, email: form.email, password: form.password, phone: form.phone, role: 'candidate' }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        if (data.error?.includes('already exists')) setError('An account with this email already exists')
-        else setError(data.error || 'Registration failed')
-        return
-      }
-      if (data.user) {
-        setUser(data.user)
-        navigate('seeker-dashboard')
-      }
-    } catch { setError('Something went wrong') } finally { setLoading(false) }
+      const { user } = await neonSignUp({ email: form.email, password: form.password, name: form.name, phone: form.phone, role: 'candidate' })
+      setUser({ id: user.id, email: user.email, name: user.name, role: user.role })
+      navigate('seeker-dashboard')
+    } catch (err) { setError(err instanceof Error ? err.message : 'Something went wrong') } finally { setLoading(false) }
   }
 
   return (
@@ -293,11 +221,13 @@ export function RegisterCandidatePage() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-              <div className="space-y-2"><Label>Full name</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required className="border-[#D1D9E6]" /></div>
-              <div className="space-y-2"><Label>Email</Label><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required className="border-[#D1D9E6]" /></div>
-              <div className="space-y-2"><Label>Phone</Label><Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="border-[#D1D9E6]" /></div>
-              <div className="space-y-2"><Label>Password</Label><Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required placeholder="Min. 8 characters" className="border-[#D1D9E6]" /></div>
-              <Button type="submit" disabled={loading} className="w-full bg-[#C4942A] hover:bg-[#B38524] text-white h-11">{loading ? 'Creating...' : 'Create Your Profile'}</Button>
+              <div className="space-y-2"><Label>Full name</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required className="border-[#D1D9E6]" disabled={loading} /></div>
+              <div className="space-y-2"><Label>Email</Label><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required className="border-[#D1D9E6]" disabled={loading} /></div>
+              <div className="space-y-2"><Label>Phone</Label><Input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="border-[#D1D9E6]" disabled={loading} /></div>
+              <div className="space-y-2"><Label>Password</Label><Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required placeholder="Min. 8 characters" className="border-[#D1D9E6]" disabled={loading} /></div>
+              <Button type="submit" disabled={loading} className="w-full bg-[#C4942A] hover:bg-[#B38524] text-white h-11">
+                {loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Creating...</span> : 'Create Your Profile'}
+              </Button>
             </form>
           </CardContent>
         </Card>
