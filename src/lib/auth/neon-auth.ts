@@ -13,13 +13,21 @@ export interface AppUser {
   neonAuthId: string
 }
 
-function isNeonError(res: unknown): res is { error: { message: string } } {
-  return (
-    typeof res === 'object' &&
-    res !== null &&
-    'error' in res &&
-    typeof (res as any).error?.message === 'string'
-  )
+function extractErrorMessage(data: unknown, fallback: string): string {
+  if (typeof data === 'object' && data !== null) {
+    const d = data as Record<string, unknown>
+    if (typeof d.message === 'string' && d.message) return d.message
+    if (typeof d.error === 'string' && d.error) return d.error
+    if (
+      typeof d.error === 'object' &&
+      d.error !== null &&
+      'message' in d.error &&
+      typeof (d.error as Record<string, unknown>).message === 'string'
+    ) {
+      return (d.error as Record<string, unknown>).message as string
+    }
+  }
+  return fallback
 }
 
 /** Sign up via Neon Auth, then link to Prisma User */
@@ -29,6 +37,7 @@ export async function neonSignUp(params: {
   name: string
   phone?: string
   role?: string
+  companyName?: string
 }): Promise<{ user: AppUser }> {
   const res = await fetch(`${AUTH_BASE}/sign-up/email`, {
     method: 'POST',
@@ -40,12 +49,12 @@ export async function neonSignUp(params: {
       name: params.name,
     }),
   })
-  const data = await res.json()
-  if (isNeonError(data)) {
-    const msg = data.error.message
+  const data = await res.json().catch(() => null)
+  if (!res.ok || !data || !data.user) {
+    const msg = extractErrorMessage(data, 'Failed to create account. Please try again.')
     throw new Error(
-      msg.includes('already') || msg.includes('exist')
-        ? 'An account with this email already exists'
+      msg.toLowerCase().includes('already') || msg.toLowerCase().includes('exist')
+        ? 'An account with this email already exists. Please sign in.'
         : msg,
     )
   }
@@ -63,8 +72,13 @@ export async function neonSignUp(params: {
       name: params.name,
       phone: params.phone,
       role: params.role || 'candidate',
+      companyName: params.companyName,
     }),
   })
+  if (!linkRes.ok) {
+    const linkErr = await linkRes.json().catch(() => null)
+    throw new Error(extractErrorMessage(linkErr, 'Account created but failed to link profile. Please try logging in.'))
+  }
   const appUser: AppUser = await linkRes.json()
   return { user: appUser }
 }
@@ -83,12 +97,13 @@ export async function neonSignIn(params: {
       password: params.password,
     }),
   })
-  const data = await res.json()
-  if (isNeonError(data)) {
+  const data = await res.json().catch(() => null)
+  if (!res.ok || !data || !data.user) {
+    const msg = extractErrorMessage(data, 'Invalid email or password')
     throw new Error(
-      data.error.message.includes('invalid') || data.error.message.includes('credential')
+      msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('credential')
         ? 'Invalid email or password'
-        : data.error.message,
+        : msg,
     )
   }
   const neonUser = data.user
@@ -104,6 +119,10 @@ export async function neonSignIn(params: {
       name: data.user.name || '',
     }),
   })
+  if (!linkRes.ok) {
+    const linkErr = await linkRes.json().catch(() => null)
+    throw new Error(extractErrorMessage(linkErr, 'Signed in but failed to link profile.'))
+  }
   const appUser: AppUser = await linkRes.json()
   return { user: appUser }
 }
@@ -113,25 +132,41 @@ export async function neonGetSession(): Promise<{
   session: { id: string; token: string; expiresAt: string; userId: string } | null
   user: { id: string; email: string; name: string | null } | null
 }> {
-  const res = await fetch(`${AUTH_BASE}/get-session`, { credentials: 'same-origin' })
-  return res.json()
+  try {
+    const res = await fetch(`${AUTH_BASE}/get-session`, { credentials: 'same-origin' })
+    if (!res.ok) return { session: null, user: null }
+    const data = await res.json().catch(() => null)
+    if (!data || typeof data !== 'object') return { session: null, user: null }
+    return {
+      session: data.session || null,
+      user: data.user || null,
+    }
+  } catch {
+    return { session: null, user: null }
+  }
 }
 
 /** Sign out from Neon Auth */
 export async function neonSignOut(): Promise<void> {
-  await fetch(`${AUTH_BASE}/sign-out`, { method: 'POST', credentials: 'same-origin' })
+  await fetch(`${AUTH_BASE}/sign-out`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+    credentials: 'same-origin',
+  })
 }
 
 /** Get full app user (Prisma profile) for current session */
 export async function neonGetAppUser(): Promise<AppUser | null> {
-  const { session, user: neonUser } = await neonGetSession()
-  if (!session || !neonUser) return null
+  const sessionData = await neonGetSession()
+  if (!sessionData || !sessionData.session || !sessionData.user) return null
+  const neonUser = sessionData.user
 
   try {
     const res = await fetch(`${AUTH_BASE}/link-user`, { credentials: 'same-origin' })
     if (res.ok) {
-      const appUser = await res.json()
-      if (appUser) return appUser
+      const appUser = await res.json().catch(() => null)
+      if (appUser && appUser.id) return appUser
     }
   } catch { /* fallback below */ }
 

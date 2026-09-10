@@ -98,10 +98,11 @@ export async function POST(
 
   try {
     const body = await request.text()
+    const finalBody = body && body.trim().length > 0 ? body : '{}'
     const res = await fetch(`${NEON_AUTH_URL}/${fullPath}`, {
       method: 'POST',
       headers: proxyHeaders(request),
-      body,
+      body: finalBody,
     })
     const data = await res.json()
     const response = NextResponse.json(data, { status: res.status })

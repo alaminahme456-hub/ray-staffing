@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { useAppStore, getPortalType, isAuthView } from '@/store/app-store'
+import { neonGetAppUser } from '@/lib/auth/neon-auth'
 import { PublicHeader } from '@/components/layout/PublicHeader'
 import { PublicFooter } from '@/components/layout/PublicFooter'
 import { PortalSidebar, PortalTopBar } from '@/components/layout/PortalSidebar'
@@ -114,7 +115,7 @@ function PageRouter() {
 }
 
 export default function App() {
-  const { currentView } = useAppStore()
+  const { currentView, setUser, user } = useAppStore()
   const portalType = getPortalType(currentView)
   const isAuth = isAuthView(currentView)
   const isPortal = portalType !== 'public'
@@ -122,7 +123,14 @@ export default function App() {
 
   useEffect(() => {
     document.title = 'RAY Staffing Consulting Ltd | Quality Housing, HR & Talent'
-  }, [])
+    if (!user) {
+      neonGetAppUser().then((appUser) => {
+        if (appUser) {
+          setUser({ id: appUser.id, email: appUser.email, name: appUser.name, role: appUser.role })
+        }
+      }).catch(() => {})
+    }
+  }, [user, setUser])
 
   if (!isPortal && !isAuth) {
     return (

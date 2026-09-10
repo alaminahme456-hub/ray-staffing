@@ -8,7 +8,7 @@ import { getNeonSession } from '@/lib/auth/server'
 
 export async function POST(req: NextRequest) {
   try {
-    const { neonUserId, email, name, phone, role } = await req.json()
+    const { neonUserId, email, name, phone, role, companyName } = await req.json()
     if (!neonUserId || !email) {
       return NextResponse.json({ error: 'neonUserId and email required' }, { status: 400 })
     }
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
         emailVerified: true,
         lastLogin: new Date(),
         ...(role === 'candidate' ? { profile: { create: { profileComplete: 0 } } } : {}),
-        ...(role === 'employer' ? { employer: { create: { companyName: name || '' } } } : {}),
+        ...(role === 'employer' ? { employer: { create: { companyName: companyName || name || 'Organization' } } } : {}),
         ...(role === 'customer' ? { customer: { create: { firstName: name || '' } } } : {}),
       },
     })
@@ -60,8 +60,11 @@ export async function POST(req: NextRequest) {
 
 export async function GET() {
   try {
-    const { session, user: neonUser } = await getNeonSession()
-    if (!session || !neonUser) return NextResponse.json(null, { status: 401 })
+    const sessionResult = await getNeonSession()
+    if (!sessionResult || !sessionResult.session || !sessionResult.user) {
+      return NextResponse.json(null, { status: 401 })
+    }
+    const { user: neonUser } = sessionResult
 
     let user = await db.user.findUnique({ where: { neonAuthId: neonUser.id } })
 

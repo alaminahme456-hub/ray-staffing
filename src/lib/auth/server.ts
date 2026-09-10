@@ -50,7 +50,14 @@ export async function getNeonSession(): Promise<SessionResult> {
       cache: 'no-store',
     })
     if (!res.ok) return { session: null, user: null }
-    return await res.json()
+    const data = await res.json().catch(() => null)
+    if (!data || typeof data !== 'object') {
+      return { session: null, user: null }
+    }
+    return {
+      session: data.session || null,
+      user: data.user || null,
+    }
   } catch (error) {
     console.error('[Neon Auth] get-session error:', error)
     return { session: null, user: null }
