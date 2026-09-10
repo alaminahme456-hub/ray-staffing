@@ -32,6 +32,22 @@ function createMockDb() {
   })
 }
 
+function isTransientConnectionError(err: unknown): boolean {
+  if (!err) return false
+  const str = String(err)
+  const code = (err as Record<string, unknown>)?.code
+  return (
+    str.includes('Closed') ||
+    str.includes('Connection terminated') ||
+    str.includes('connection closed') ||
+    str.includes('Broken pipe') ||
+    str.includes('ECONNRESET') ||
+    code === 'P1001' || // Can't reach database server (cold start wake-up)
+    code === 'P1002' || // Timed out
+    code === 'P1017'    // Server has closed the connection
+  )
+}
+
 function getPrismaClient() {
   if (!process.env.DATABASE_URL) {
     console.warn('[AI Studio] DATABASE_URL not set — using mock db')
@@ -39,10 +55,50 @@ function getPrismaClient() {
   }
 
   try {
-    const client = new PrismaClient({
-      log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+    const baseClient = new PrismaClient({
+      log: [
+        { emit: 'event', level: 'error' },
+        { emit: 'event', level: 'warn' },
+      ],
     })
-    return client
+
+    // Filter out expected serverless idle connection drops from polluting stderr
+    baseClient.$on('error' as never, (e: { message?: string }) => {
+      if (e.message && (e.message.includes('kind: Closed') || e.message.includes('connection closed'))) {
+        return
+      }
+      console.error('[Prisma Error]', e.message || e)
+    })
+
+    baseClient.$on('warn' as never, (e: { message?: string }) => {
+      console.warn('[Prisma Warn]', e.message || e)
+    })
+
+    // Transparently retry transient connection drops (e.g., Neon compute cold starts / idle drops)
+    const extendedClient = baseClient.$extends({
+      query: {
+        $allModels: {
+          async $allOperations({ model, operation, args, query }: any) {
+            let attempts = 0
+            while (attempts < 2) {
+              try {
+                return await query(args)
+              } catch (err) {
+                attempts++
+                if (attempts < 2 && isTransientConnectionError(err)) {
+                  // Brief pause to let Neon compute wake or re-pool
+                  await new Promise((resolve) => setTimeout(resolve, 300 * attempts))
+                  continue
+                }
+                throw err
+              }
+            }
+          },
+        },
+      },
+    })
+
+    return extendedClient
   } catch (error) {
     console.warn('[AI Studio] Database not connected — using mock', error)
     return createMockDb()
