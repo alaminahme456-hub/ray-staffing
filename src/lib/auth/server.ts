@@ -5,7 +5,7 @@
 
 import { cookies } from 'next/headers'
 
-const NEON_AUTH_URL = process.env.NEXT_PUBLIC_NEON_AUTH_URL!
+const NEON_AUTH_URL = process.env.NEXT_PUBLIC_NEON_AUTH_URL || ''
 
 export interface NeonServerUser {
   id: string
@@ -29,6 +29,10 @@ interface SessionResult {
 
 /** Get current Neon Auth session from incoming request cookies */
 export async function getNeonSession(): Promise<SessionResult> {
+  if (!NEON_AUTH_URL) {
+    return { session: null, user: null }
+  }
+
   const cookieStore = await cookies()
   const cookieHeader = cookieStore
     .getAll()

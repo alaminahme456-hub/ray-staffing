@@ -1,0 +1,6 @@
+{
+  "name": "RAY Staffing",
+  "description": "Quality housing, HR consultancy, and specialist recruitment services portal for RAY Staffing Consulting Ltd.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

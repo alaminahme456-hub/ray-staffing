@@ -8,9 +8,16 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 
-const NEON_AUTH_URL = process.env.NEXT_PUBLIC_NEON_AUTH_URL!
-// Derive origin for the Origin header (Neon Auth requires it)
-const NEON_AUTH_ORIGIN = new URL(NEON_AUTH_URL).origin
+const NEON_AUTH_URL = process.env.NEXT_PUBLIC_NEON_AUTH_URL || ''
+
+function getNeonOrigin(): string {
+  if (!NEON_AUTH_URL) return ''
+  try {
+    return new URL(NEON_AUTH_URL).origin
+  } catch {
+    return ''
+  }
+}
 
 const PROXIED_PATHS = new Set([
   'sign-in/email', 'sign-up/email', 'sign-out', 'get-session',
@@ -22,7 +29,7 @@ const PROXIED_PATHS = new Set([
 function proxyHeaders(request: NextRequest, extra?: Record<string, string>): HeadersInit {
   const h: Record<string, string> = {
     'Content-Type': 'application/json',
-    'Origin': NEON_AUTH_ORIGIN,
+    'Origin': getNeonOrigin(),
     ...(request.headers.get('cookie') ? { Cookie: request.headers.get('cookie')! } : {}),
     ...extra,
   }
@@ -52,6 +59,13 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
+  if (!NEON_AUTH_URL) {
+    if (fullPath === 'get-session') {
+      return NextResponse.json({ session: null, user: null })
+    }
+    return NextResponse.json({ error: 'Auth service not configured' }, { status: 503 })
+  }
+
   try {
     const res = await fetch(`${NEON_AUTH_URL}/${fullPath}`, {
       headers: proxyHeaders(request),
@@ -76,6 +90,10 @@ export async function POST(
 
   if (!PROXIED_PATHS.has(fullPath)) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
+  if (!NEON_AUTH_URL) {
+    return NextResponse.json({ error: 'Auth service not configured. Please set NEXT_PUBLIC_NEON_AUTH_URL.' }, { status: 503 })
   }
 
   try {

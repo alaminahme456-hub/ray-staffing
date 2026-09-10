@@ -148,14 +148,9 @@ export default function SeekerDocuments() {
     loadDocs(user.id)
   }
 
-  if (!user) return null
-  if (loading) return <PageSkeleton />
-
-  const filteredDocs =
-    filter === 'all' ? docs : docs.filter((d) => d.doc_type === filter)
-
   const handleFile = useCallback(
     async (file: File) => {
+      if (!user) return
       setError(null)
       setUploadSuccess(false)
       const ext = '.' + file.name.split('.').pop()?.toLowerCase()
@@ -200,7 +195,7 @@ export default function SeekerDocuments() {
         setUploading(false)
       }
     },
-    [user.id, uploadType, loadDocs]
+    [user, uploadType, loadDocs]
   )
 
   const handleDrop = useCallback(
@@ -237,6 +232,12 @@ export default function SeekerDocuments() {
       setDeleting(null)
     }
   }
+
+  if (!user) return null
+  if (loading) return <PageSkeleton />
+
+  const filteredDocs =
+    filter === 'all' ? docs : docs.filter((d) => d.doc_type === filter)
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
