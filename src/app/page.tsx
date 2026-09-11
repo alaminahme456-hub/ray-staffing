@@ -20,6 +20,7 @@ import ContactPage from '@/components/public/ContactPage'
 import ResourcesPage from '@/components/public/ResourcesPage'
 import CareersPage from '@/components/public/CareersPage'
 import { PrivacyPage, CookiePage, TermsPage } from '@/components/public/LegalPages'
+import NotFoundView from '@/components/public/NotFoundPage'
 
 // Auth (named exports)
 import { LoginPage, RegisterPage, RegisterEmployerPage, RegisterCandidatePage } from '@/components/shared/AuthPages'
@@ -107,10 +108,11 @@ function PageRouter() {
     'seo-dashboard': SeoDashboard, 'seo-pages': SeoPages,
     'seo-sitemap': SeoSitemap, 'seo-robots': SeoRobots,
     'seo-analyzer': SeoAnalyzer, 'seo-performance': SeoPerformance,
+    '404': NotFoundView,
   }
 
   const PageComponent = pageMap[currentView]
-  if (!PageComponent) return <HomePage />
+  if (!PageComponent) return <NotFoundView />
   return <PageComponent />
 }
 

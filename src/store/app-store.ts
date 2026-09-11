@@ -5,7 +5,7 @@ export type AppView =
   // Public pages
   | 'home' | 'about' | 'housing' | 'hr-solutions' | 'compliance' 
   | 'healthcare' | 'job-seekers' | 'employers' | 'contact'
-  | 'resources' | 'careers' | 'privacy' | 'cookies' | 'terms'
+  | 'resources' | 'careers' | 'privacy' | 'cookies' | 'terms' | '404'
   // Auth
   | 'login' | 'register' | 'register-employer' | 'register-candidate'
   // Customer Portal
