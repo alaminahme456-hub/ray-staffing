@@ -62,25 +62,39 @@ export async function neonSignUp(params: {
   const neonUser = data.user
 
   // Link to Prisma
-  const linkRes = await fetch(`${AUTH_BASE}/link-user`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: JSON.stringify({
-      neonUserId: neonUser.id,
-      email: neonUser.email,
-      name: params.name,
-      phone: params.phone,
-      role: params.role || 'candidate',
-      companyName: params.companyName,
-    }),
-  })
-  if (!linkRes.ok) {
-    const linkErr = await linkRes.json().catch(() => null)
-    throw new Error(extractErrorMessage(linkErr, 'Account created but failed to link profile. Please try logging in.'))
+  try {
+    const linkRes = await fetch(`${AUTH_BASE}/link-user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        neonUserId: neonUser.id,
+        email: neonUser.email,
+        name: params.name,
+        phone: params.phone,
+        role: params.role || 'candidate',
+        companyName: params.companyName,
+      }),
+    })
+    if (linkRes.ok) {
+      const appUser: AppUser = await linkRes.json()
+      return { user: appUser }
+    }
+    console.warn('[neon-auth] Link-user returned non-ok status:', linkRes.status)
+  } catch (err) {
+    console.warn('[neon-auth] Link-user request failed:', err)
   }
-  const appUser: AppUser = await linkRes.json()
-  return { user: appUser }
+
+  // Graceful fallback to authenticated Neon user
+  return {
+    user: {
+      id: neonUser.id,
+      email: neonUser.email,
+      name: params.name || neonUser.name || neonUser.email,
+      role: params.role || 'candidate',
+      neonAuthId: neonUser.id,
+    },
+  }
 }
 
 /** Sign in via Neon Auth, then get/create linked Prisma User */
@@ -109,22 +123,36 @@ export async function neonSignIn(params: {
   const neonUser = data.user
 
   // Link to Prisma (no-op if already linked)
-  const linkRes = await fetch(`${AUTH_BASE}/link-user`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: JSON.stringify({
-      neonUserId: neonUser.id,
-      email: neonUser.email,
-      name: data.user.name || '',
-    }),
-  })
-  if (!linkRes.ok) {
-    const linkErr = await linkRes.json().catch(() => null)
-    throw new Error(extractErrorMessage(linkErr, 'Signed in but failed to link profile.'))
+  try {
+    const linkRes = await fetch(`${AUTH_BASE}/link-user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        neonUserId: neonUser.id,
+        email: neonUser.email,
+        name: data.user.name || '',
+      }),
+    })
+    if (linkRes.ok) {
+      const appUser: AppUser = await linkRes.json()
+      return { user: appUser }
+    }
+    console.warn('[neon-auth] Link-user returned non-ok status during sign-in:', linkRes.status)
+  } catch (err) {
+    console.warn('[neon-auth] Link-user request failed during sign-in:', err)
   }
-  const appUser: AppUser = await linkRes.json()
-  return { user: appUser }
+
+  // Graceful fallback to authenticated Neon user
+  return {
+    user: {
+      id: neonUser.id,
+      email: neonUser.email,
+      name: data.user.name || neonUser.email,
+      role: 'candidate',
+      neonAuthId: neonUser.id,
+    },
+  }
 }
 
 /** Get current session from Neon Auth */

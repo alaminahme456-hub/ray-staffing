@@ -48,14 +48,37 @@ function isTransientConnectionError(err: unknown): boolean {
   )
 }
 
+function getDatabaseUrl(): string | undefined {
+  const raw = process.env.DATABASE_URL
+  if (!raw) return undefined
+  try {
+    const url = new URL(raw)
+    if (url.hostname.includes('pooler')) {
+      url.searchParams.delete('channel_binding')
+      if (!url.searchParams.has('connect_timeout')) url.searchParams.set('connect_timeout', '30')
+      if (!url.searchParams.has('pool_timeout')) url.searchParams.set('pool_timeout', '30')
+      if (!url.searchParams.has('pgbouncer')) url.searchParams.set('pgbouncer', 'true')
+    }
+    return url.toString()
+  } catch {
+    return raw
+  }
+}
+
 function getPrismaClient() {
-  if (!process.env.DATABASE_URL) {
+  const dbUrl = getDatabaseUrl()
+  if (!dbUrl) {
     console.warn('[AI Studio] DATABASE_URL not set — using mock db')
     return createMockDb()
   }
 
   try {
     const baseClient = new PrismaClient({
+      datasources: {
+        db: {
+          url: dbUrl,
+        },
+      },
       log: [
         { emit: 'event', level: 'error' },
         { emit: 'event', level: 'warn' },
